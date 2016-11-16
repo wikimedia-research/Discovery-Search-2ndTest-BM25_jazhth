@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data
+*.rds
+*.tsv
+docs/index_cache
+docs/index.md
