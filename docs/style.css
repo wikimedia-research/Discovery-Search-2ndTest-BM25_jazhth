@@ -1,0 +1,32 @@
+body { font-size: 12pt; }
+.caption { font-size: 10pt; }
+h1 { font-size: 20pt; }
+h2 { font-size: 18pt; }
+h3 { font-size: 16pt; }
+h4 { font-size: 14pt; }
+h5 { font-size: 14pt; }
+h6 { font-size: 14pt; }
+
+.author { font-size: 14pt; }
+
+a, a:hover, a:visited, a:active { color: #3399ff; text-decoration: none; }
+
+.sql { font-size: 10pt; }
+
+dl {
+  margin-left: 0.1in;
+}
+dl dt {
+  font-style: italic;
+}
+dl dd {
+  margin: 0.01in 0 0.05in 0.25in;
+}
+
+/* RColorBrewer::brewer.pal(5, "Set1") */
+.test-group-1 { color: #E41A1C; }
+.test-group-2 { color: #377EB8; }
+.test-group-3 { color: #4DAF4A; }
+.test-group-4 { color: #984EA3; }
+.test-group-5 { color: #FF7F00; }
+.no-italics { font-style: normal; }

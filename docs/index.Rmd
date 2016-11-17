@@ -1,0 +1,384 @@
+---
+title: "Second BM25 A/B test (ja, zh, th) Analysis"
+author:
+- <a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)
+- <a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering & Report)
+- <a href = 'https://meta.wikimedia.org/wiki/User:TJones_(WMF)'>Trey Jones</a> (Engineering & Review)
+- <a href = 'https://meta.wikimedia.org/wiki/User:MPopov_(WMF)'>Mikhail Popov</a> (Review)
+- <a href = 'https://meta.wikimedia.org/wiki/User:DTankersley_(WMF)'>Deb Tankersley</a> (Product Management)
+- <a href = 'https://meta.wikimedia.org/wiki/User:CXie_(WMF)'>Chelsy Xie</a> (Analysis & Report)
+date: "`r as.character(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    css: style.css
+    fig_caption: yes
+    fig_width: 10
+    fig_height: 6
+    highlight: zenburn
+    keep_md: yes
+    mathjax: https://tools-static.wmflabs.org/cdnjs/ajax/libs/mathjax/2.6.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+    md_extensions: +raw_html +markdown_in_html_blocks +tex_math_dollars +fancy_lists +startnum +lists_without_preceding_blankline
+    self_contained: no
+    theme: flatly
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+---
+<script language="JavaScript">
+$(function() {
+  /* Lets the user click on the images to view them in full resolution. */
+  $("div.figure img").wrap(function() {
+    var link = $('<a/>');
+    link.attr('href', $(this).attr('src'));
+    link.attr('title', $(this).attr('alt'));
+    link.attr('target', '_blank');
+    return link;
+  });
+});
+</script>
+<p>{ <a href="https://github.com/wikimedia-research/Discovery-Search-2ndTest-BM25_jazhth/blob/master/docs/index.Rmd">RMarkdown Source</a> | <a href="https://github.com/wikimedia-research/Discovery-Search-2ndTest-BM25_jazhth">Analysis Codebase</a> }</p>
+```{r setup, echo = FALSE, warning = FALSE, message = FALSE}
+options(digits = 3, scipen = 500)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+path <- function(x) {
+  if (grepl("docs", getwd(), fixed = TRUE)) {
+    return(file.path("..", x))
+  } else {
+    return(x)
+  }
+}
+# Font to go together with HTML version of report: http://www.latofonts.com/
+# extrafont::font_import("~/Downloads/Lato2OFL")
+```
+```{r captions, echo = FALSE}
+# Manual figure & table captioning:
+library(magrittr)
+library(captioner) # install.packages("captioner")
+table_caps <- captioner(prefix = "Table")
+figure_caps <- captioner(prefix = "Figure")
+code_caps <- captioner(prefix = "Snippet")
+# Custom caption formatting and printing:
+format_caption <- function(caps, name) {
+  return({
+    sub(caps(name, display = "cite"),
+      paste0("**", caps(name, display = "cite"),"**"),
+      caps(name, display = "full"), fixed = TRUE) %>%
+    sub("  ", " ", ., fixed = TRUE)
+  })
+}
+print_caption <- function(formatted_caption) {
+  cat(paste0('<p class = "caption">', formatted_caption, '</p>', collapse = ''))
+}
+# Add captions:
+#code_caps(name = "bm25_query", caption = "Query used to extract BM25 test data from our event logging database.", display = FALSE)
+#table_caps(name = "clustering_example", caption = "Example of how choice of linkage affects clustering of queries from a real search session.", display = FALSE)
+table_caps(name = "group_counts", caption = "Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
+table_caps(name = "group_counts2", caption = "After SERP De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
+#figure_caps("query_reform_counts", "Proportions of searches with 0, 1, 2, and 3+ query reformulations.", display = FALSE)
+#figure_caps("query_reform_prop", "Proportions of searches where user reformulated their query.", display = FALSE)
+figure_caps("zrr", "Zero results rate is the proportion of searches in which the user received zero results.", display = FALSE)
+figure_caps("paulscore", "Average per-group PaulScore for various values of F (0.1, 0.5, and 0.9) with bootstrapped confidence intervals.", display = FALSE)
+figure_caps("engagement_overall", "Clickthrough rates of test groups.", display = FALSE)
+#figure_caps("engagement", "Clickthrough rates of test groups after splitting searches into those having query reformulations and those without query reformulations.", display = FALSE)
+figure_caps("first_clicked", "First clicked result's position by group.", display = FALSE)
+```
+
+```{r install_packages, eval = FALSE}
+# Install packages used in the report:
+install.packages(c("devtools", "tidyverse", "binom"))
+devtools::install_github("hadley/ggplot2")
+# ^ development version of ggplot2 includes subtitles
+devtools::install_github("wikimedia/wikimedia-discovery-polloi")
+# ^ for converting 100000 into 100K via polloi::compress()
+```
+```{r load_packages}
+# Load packages that we will be using in this report:
+library(tidyverse) # for ggplot2, dplyr, tidyr, broom, etc.
+library(binom) # for Bayesian confidence intervals of proportions
+```
+
+```{r paulscore_functions, cache = TRUE}
+# PaulScore Calculation
+query_score <- function(positions, F) {
+   if (length(positions) == 1 || all(is.na(positions))) {
+    # no clicks were made
+    return(0)
+   } else {
+     positions <- positions[!is.na(positions)] # when operating on 'events' dataset, SERP events won't have positions
+  return(sum(F^positions))
+   }
+}
+# Bootstrapping
+bootstrap_mean <- function(x, m, seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+  n <- length(x)
+  return(replicate(m, mean(x[sample.int(n, n, replace = TRUE)])))
+}
+```
+
+## Results
+```{r data, cache = TRUE}
+# Import events fetched from MySQL
+load(path("data/ab-test_bm25.RData"))
+events <- events[!duplicated(events$event_id),]
+events$test_group <- factor(
+  events$test_group,
+  levels = c("bm25:control", "bm25:inclinks_pv"),
+  labels = c("Control Group (tf–idf)", "Using per-field query builder with incoming links and pageviews as QIFs"))
+cirrus <- readr::read_tsv(path("data/ab-test_bm25_cirrus-results.tsv.gz"), col_types = "cccc")
+cirrus <- cirrus[!duplicated(cirrus),]
+events <- left_join(events, cirrus, by = c("event_id", "page_id", "cirrus_id"))
+rm(cirrus)
+```
+The test was deployed on October 27th (Is it? Phab ticket showed the test deployed on Oct 25, but the earliest data I've got is on 27) and ran for a week (thwiki ran longer, till Nov 15. Not sure if it is still running now..), collecting a total of `r polloi::compress(nrow(events), 1)` events from `r polloi::compress(length(unique(events$search_id)), 1)` unique sessions. See `r table_caps("group_counts", display = "cite")` for counts broken down by wiki and test group.
+
+```{r summary, results = "asis", dependson = "data"}
+events_summary <- events %>%
+  group_by(wiki, `Test group` = test_group) %>%
+  summarize(`Search sessions` = length(unique(search_id)), `Events recorded` = n()) %>% ungroup %>%
+  {
+    rbind(., tibble(
+      `wiki` = "Total",
+      `Test group` = "Total",
+      `Search sessions` = sum(.$`Search sessions`),
+      `Events recorded` = sum(.$`Events recorded`)
+    ))
+  } %>%
+  mutate(`Search sessions` = prettyNum(`Search sessions`, big.mark = ","),
+         `Events recorded` = prettyNum(`Events recorded`, big.mark = ","))
+knitr::kable(events_summary, format = "markdown", align = c("l", "l", "r", "r"))
+```
+```{r summary_caption, results = "asis", echo = FALSE}
+print_caption(format_caption(table_caps, "group_counts"))
+```
+
+### SERP De-duplication
+
+An issue we noticed with the event logging is that when the user goes to the next page of search results or clicks the Back button after visiting a search result, a new page ID is generated for the search results page. The page ID is how we connect click events to search result page events. There is currently a Phabricator ticket ([T146337](https://phabricator.wikimedia.org/T146337)) for addressing these issues. For this analysis, we de-duplicated by connecting search engine results page (SERP) events that have the exact same search query, and then connected click events together based on the SERP connectivity.
+
+```{r serp_deduplication, dependson = "data", cache = TRUE}
+temp <- events %>%
+  filter(action == "SERP") %>%
+  group_by(session_id, search_id, query) %>%
+  mutate(new_page_id = min(page_id)) %>%
+  ungroup %>%
+  select(c(page_id, new_page_id)) %>%
+  distinct
+events <- left_join(events, temp, by = "page_id"); rm(temp)
+temp <- events %>%
+  filter(action == "SERP") %>%
+  arrange(new_page_id, ts) %>%
+  mutate(dupe = duplicated(new_page_id, fromLast = FALSE)) %>%
+  select(c(event_id, dupe))
+events <- left_join(events, temp, by = "event_id"); rm(temp)
+events$dupe[events$action == "click"] <- FALSE
+events <- events[!events$dupe & !is.na(events$new_page_id), ] %>%
+  select(-c(page_id, dupe)) %>%
+  rename(page_id = new_page_id) %>%
+  arrange(date, session_id, search_id, page_id, desc(action), ts)
+```
+```{r aggregation, dependson = c("serp_deduplication", "paulscore_functions"), cache = TRUE}
+# Summarize on a page-by-page basis:
+searches <- events %>%
+  group_by(wiki, `test group` = test_group, session_id, search_id, page_id) %>%
+  filter("SERP" %in% action) %>% # filter out searches where we have clicks but not SERP events
+  summarize(ts = ts[1], query = query[1],
+            results = ifelse(n_results_returned[1] > 0, "some", "zero"),
+            clickthrough = "click" %in% action,
+            `first clicked result's position` = ifelse(clickthrough, position_clicked[2], NA),
+            `result page IDs` = result_pids[1],
+            `Query score (F=0.1)` = query_score(position_clicked, 0.1),
+            `Query score (F=0.5)` = query_score(position_clicked, 0.5),
+            `Query score (F=0.9)` = query_score(position_clicked, 0.9)) %>%
+  arrange(ts)
+```
+After de-duplicating, we collapsed `r polloi::compress(nrow(events), 1)` (SERP and click) events into `r polloi::compress(nrow(searches), 1)` searches. See `r table_caps("group_counts2", display = "cite")` for counts broken down by wiki and test group.
+
+```{r summary2, results = "asis", dependson = "data"}
+events_summary2 <- events %>%
+  group_by(wiki, `Test group` = test_group) %>%
+  summarize(`Search sessions` = length(unique(search_id)), `Events recorded` = n()) %>% ungroup %>%
+  {
+    rbind(., tibble(
+      `wiki` = "Total",
+      `Test group` = "Total",
+      `Search sessions` = sum(.$`Search sessions`),
+      `Events recorded` = sum(.$`Events recorded`)
+    ))
+  } %>%
+  mutate(`Search sessions` = prettyNum(`Search sessions`, big.mark = ","),
+         `Events recorded` = prettyNum(`Events recorded`, big.mark = ","))
+searches_summary <- searches %>%
+  group_by(wiki, `Test group` = `test group`) %>%
+  summarize(`Search sessions` = length(unique(search_id)), `Searches recorded` = n()) %>% ungroup %>%
+  {
+    rbind(., tibble(
+      `wiki` = "Total",
+      `Test group` = "Total",
+      `Search sessions` = sum(.$`Search sessions`),
+      `Searches recorded` = sum(.$`Searches recorded`)
+    ))
+  } %>%
+  mutate(`Search sessions` = prettyNum(`Search sessions`, big.mark = ","),
+         `Searches recorded` = prettyNum(`Searches recorded`, big.mark = ","))
+knitr::kable(inner_join(searches_summary, events_summary2, by=c("wiki", "Test group", "Search sessions")), 
+             format = "markdown", align = c("l", "l", "r", "r", "r"))
+```
+```{r summary_caption2, results = "asis", echo = FALSE}
+print_caption(format_caption(table_caps, "group_counts2"))
+```
+
+### Zero Results Rate
+
+In `r figure_caps("zrr", display = "cite")`, we see that the test group had a significantly lower ZRR.
+
+```{r zrr, dependson = "query_clustering", cache = TRUE}
+zrr_pages <- searches %>%
+  group_by(`test group`, results) %>%
+  tally %>%
+  spread(results, n) %>%
+  mutate(`zero results rate` = zero/(some + zero)) %>%
+  ungroup
+zrr_pages <- cbind(zrr_pages, as.data.frame(binom:::binom.bayes(zrr_pages$zero, n = zrr_pages$some + zrr_pages$zero)[, c("mean", "lower", "upper")]))
+```
+```{r zrr_caption, echo = FALSE}
+zrr_cap <- format_caption(figure_caps, "zrr")
+```
+```{r zrr_eda, fig.cap = zrr_cap, dependson = "zrr"}
+zrr_pages %>%
+  ggplot(aes(x = `test group`, y = `mean`, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  scale_x_discrete(limits = rev(levels(events$test_group))) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = FALSE) +
+  labs(x = NULL, y = "Zero Results Rate",
+       title = "Proportion of searches that did not yield any results, by test group",
+       subtitle = "With 95% credible intervals.") +
+  geom_text(aes(label = sprintf("%.2f%%", 100 * `zero results rate`),
+                vjust = "bottom", hjust = "center"), nudge_x = 0.1) #+
+  #theme_minimal(base_family = "Lato")
+```
+
+### PaulScore
+
+In `r figure_caps("paulscore", display = "cite")`, we see that the test group had slightly lower PaulScores.
+
+```{r paulscores, dependson = "query_clustering", cache = TRUE}
+set.seed(777)
+paulscores <- searches %>%
+  ungroup %>%
+  filter(clickthrough==TRUE) %>% #???
+  select(c(`test group`, `Query score (F=0.1)`, `Query score (F=0.5)`, `Query score (F=0.9)`)) %>%
+  gather(`F value`, `Query score`, -`test group`) %>%
+  mutate(`F value` = sub("^Query score \\(F=(0\\.[159])\\)$", "F = \\1", `F value`)) %>%
+  group_by(`test group`, `F value`) %>%
+  summarize(
+    PaulScore = mean(`Query score`),
+    Interval = paste0(quantile(bootstrap_mean(`Query score`, 1000), c(0.025, 0.975)), collapse = ",")
+  ) %>%
+  extract(Interval, into = c("Lower", "Upper"), regex = "(.*),(.*)", convert = TRUE)
+```
+
+```{r paulscores_caption, echo = FALSE}
+paulscore_cap <- format_caption(figure_caps, "paulscore")
+```
+```{r paulscores_eda, fig.cap = paulscore_cap, dependson = "paulscores"}
+paulscores %>%
+  ggplot(aes(x = `F value`, y = PaulScore, color = `test group`)) +
+  geom_pointrange(aes(ymin = Lower, ymax = Upper), position = position_dodge(width = 0.7)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  #scale_y_continuous(limits = c(0.2, 0.35)) +
+  labs(x = NULL, y = "PaulScore(F)",
+       title = "PaulScore(F) by test group and value of F",
+       subtitle = "With bootstrapped 95% confidence intervals.") +
+  geom_text(aes(label = sprintf("%.3f", PaulScore), y = Upper + 0.01, vjust = "bottom"),
+            position = position_dodge(width = 0.7)) +
+  #theme_minimal(base_family = "Lato") +
+  theme(legend.position = "bottom") 
+```
+
+### Engagement
+
+In Figures `r figure_caps("engagement_overall", display = "num")`, we see that the test group had a significantly lower Clickthrough rate.
+
+```{r engagement_overall, dependson = "query_reformulations", cache = TRUE}
+engagement_overall <- searches %>%
+  filter(results=="some") %>% #???
+  group_by(`test group`) %>%
+  summarize(clickthroughs = sum(clickthrough > 0),
+            searches = n(), ctr = clickthroughs/searches) %>%
+  ungroup
+engagement_overall <- cbind(
+  engagement_overall,
+  as.data.frame(
+    binom:::binom.bayes(
+      engagement_overall$clickthroughs,
+      n = engagement_overall$searches)[, c("mean", "lower", "upper")]
+  )
+)
+```
+```{r engagement_overall_caption, echo = FALSE}
+engagement_overall_cap <- format_caption(figure_caps, "engagement_overall")
+```
+```{r engagement_overall_eda, fig.cap = engagement_overall_cap, dependson = "engagement_overall"}
+engagement_overall %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  labs(x = NULL, y = "Clickthrough rate",
+       title = "Engagement with search results by test group") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * ctr), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  #theme_minimal(base_family = "Lato") +
+  theme(legend.position = "bottom")
+```
+
+### First Clicked Result's Position
+
+In `r figure_caps("first_clicked", display = "cite")`, we see that test group users were less likely to click on the first search result first than the control group.
+
+```{r first_clicked_position, dependson = "query_reformulations", cache = TRUE}
+safe_ordinals <- function(x) {
+  return(vapply(x, toOrdinal::toOrdinal, ""))
+}
+first_clicked <- searches %>%
+  filter(results == "some" & clickthrough & !is.na(`first clicked result's position`)) %>%
+  mutate(`first clicked result's position` = ifelse(`first clicked result's position` < 4, safe_ordinals(`first clicked result's position` + 1), "5th or higher")) %>%
+  group_by(`test group`, `first clicked result's position`) %>%
+  tally %>%
+  mutate(total = sum(n), prop = n/total) %>%
+  ungroup
+set.seed(0)
+temp <- as.data.frame(binom:::binom.bayes(first_clicked$n, n = first_clicked$total, tol = .Machine$double.eps^0.1)[, c("mean", "lower", "upper")])
+first_clicked <- cbind(first_clicked, temp); rm(temp)
+```
+```{r first_clicked_position_caption, echo = FALSE}
+first_clicked_cap <- format_caption(figure_caps, "first_clicked")
+```
+```{r first_clicked_position_eda, fig.cap = first_clicked_cap, dependson = "first_clicked_position"}
+first_clicked %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  geom_text(aes(label = sprintf("%.1f", 100 * prop), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  scale_y_continuous(labels = scales::percent_format(),
+                     expand = c(0, 0.005), breaks = seq(0, 1, 0.01)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  facet_wrap(~ `first clicked result's position`, scale = "free_y", nrow = 1) +
+  labs(x = NULL, y = "Proportion of searches",
+       title = "Position of the first clicked result",
+       subtitle = "With 95% credible intervals") +
+  #theme_minimal(base_family = "Lato") +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        strip.background = element_rect(fill = "gray90"),
+        panel.border = element_rect(color = "gray30", fill = NA))
+```

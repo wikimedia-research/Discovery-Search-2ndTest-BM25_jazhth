@@ -55,6 +55,7 @@ system("ssh-add -A && scp stat2:/home/chelsyx/ab-test_bm25.RData data/")
 results <- wmf::query_hive("ADD JAR hdfs:///wmf/refinery/current/artifacts/refinery-hive.jar;
                            CREATE TEMPORARY FUNCTION array_sum AS 'org.wikimedia.analytics.refinery.hive.ArraySumUDF';
                            SELECT
+                           event_logs.cirrus_id AS cirrus_id,
                            event_logs.page_id AS page_id,
                            event_logs.event_id AS event_id,
                            search_results.page_id AS result_pids
