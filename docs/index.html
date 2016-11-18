@@ -16,7 +16,7 @@
 <meta name="author" content="Deb Tankersley (Product Management)" />
 <meta name="author" content="Chelsy Xie (Analysis &amp; Report)" />
 
-<meta name="date" content="2016-11-16" />
+<meta name="date" content="2016-11-17" />
 
 <title>Second BM25 A/B test (ja, zh, th) Analysis</title>
 
@@ -284,7 +284,7 @@ div.tocify {
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:MPopov_(WMF)'>Mikhail Popov</a> (Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:DTankersley_(WMF)'>Deb Tankersley</a> (Product Management)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:CXie_(WMF)'>Chelsy Xie</a> (Analysis &amp; Report)</em></h4>
-<h4 class="date"><em>16 November 2016</em></h4>
+<h4 class="date"><em>17 November 2016</em></h4>
 
 </div>
 
@@ -585,6 +585,26 @@ zrr_pages &lt;-<span class="st"> </span><span class="kw">cbind</span>(zrr_pages,
 <p class="caption"><strong>Figure 1</strong>: Zero results rate is the proportion of searches in which the user received zero results.</p>
 </div>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">  <span class="co">#theme_minimal(base_family = &quot;Lato&quot;)</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">zrr_pages &lt;-<span class="st"> </span>searches %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, results) %&gt;%
+<span class="st">  </span>tally %&gt;%
+<span class="st">  </span><span class="kw">spread</span>(results, n) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="st">`</span><span class="dt">zero results rate</span><span class="st">`</span> =<span class="st"> </span>zero/(some +<span class="st"> </span>zero)) %&gt;%
+<span class="st">  </span>ungroup
+zrr_pages &lt;-<span class="st"> </span><span class="kw">cbind</span>(zrr_pages, <span class="kw">as.data.frame</span>(binom:::<span class="kw">binom.bayes</span>(zrr_pages$zero, <span class="dt">n =</span> zrr_pages$some +<span class="st"> </span>zrr_pages$zero)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]))
+zrr_pages %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">y =</span> <span class="st">`</span><span class="dt">mean</span><span class="st">`</span>, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper)) +
+<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">rev</span>(<span class="kw">levels</span>(events$test_group))) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="ot">FALSE</span>) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Zero Results Rate&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Proportion of searches that did not yield any results, by test group and wiki&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;With 95% credible intervals.&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.2f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> `</span><span class="dt">zero results rate</span><span class="st">`</span>),
+                <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>, <span class="dt">hjust =</span> <span class="st">&quot;center&quot;</span>), <span class="dt">nudge_x =</span> <span class="fl">0.1</span>) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>) </code></pre></div>
+<p><img src="index_files/figure-html/zrr_eda2-1.png" /><!-- --></p>
 </div>
 <div id="paulscore" class="section level3">
 <h3>PaulScore</h3>
@@ -618,6 +638,32 @@ paulscores &lt;-<span class="st"> </span>searches %&gt;%
 <img src="index_files/figure-html/paulscores_eda-1.png" alt="Figure 2: Average per-group PaulScore for various values of F (0.1, 0.5, and 0.9) with bootstrapped confidence intervals." />
 <p class="caption"><strong>Figure 2</strong>: Average per-group PaulScore for various values of F (0.1, 0.5, and 0.9) with bootstrapped confidence intervals.</p>
 </div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">set.seed</span>(<span class="dv">777</span>)
+paulscores &lt;-<span class="st"> </span>searches %&gt;%
+<span class="st">  </span>ungroup %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(clickthrough==<span class="ot">TRUE</span>) %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">select</span>(<span class="kw">c</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="st">`</span><span class="dt">Query score (F=0.1)</span><span class="st">`</span>, <span class="st">`</span><span class="dt">Query score (F=0.5)</span><span class="st">`</span>, <span class="st">`</span><span class="dt">Query score (F=0.9)</span><span class="st">`</span>)) %&gt;%
+<span class="st">  </span><span class="kw">gather</span>(<span class="st">`</span><span class="dt">F value</span><span class="st">`</span>, <span class="st">`</span><span class="dt">Query score</span><span class="st">`</span>, -<span class="kw">c</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, wiki)) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="st">`</span><span class="dt">F value</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sub</span>(<span class="st">&quot;^Query score </span><span class="ch">\\</span><span class="st">(F=(0</span><span class="ch">\\</span><span class="st">.[159])</span><span class="ch">\\</span><span class="st">)$&quot;</span>, <span class="st">&quot;F = </span><span class="ch">\\</span><span class="st">1&quot;</span>, <span class="st">`</span><span class="dt">F value</span><span class="st">`</span>)) %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="st">`</span><span class="dt">F value</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(
+    <span class="dt">PaulScore =</span> <span class="kw">mean</span>(<span class="st">`</span><span class="dt">Query score</span><span class="st">`</span>),
+    <span class="dt">Interval =</span> <span class="kw">paste0</span>(<span class="kw">quantile</span>(<span class="kw">bootstrap_mean</span>(<span class="st">`</span><span class="dt">Query score</span><span class="st">`</span>, <span class="dv">1000</span>), <span class="kw">c</span>(<span class="fl">0.025</span>, <span class="fl">0.975</span>)), <span class="dt">collapse =</span> <span class="st">&quot;,&quot;</span>)
+  ) %&gt;%
+<span class="st">  </span><span class="kw">extract</span>(Interval, <span class="dt">into =</span> <span class="kw">c</span>(<span class="st">&quot;Lower&quot;</span>, <span class="st">&quot;Upper&quot;</span>), <span class="dt">regex =</span> <span class="st">&quot;(.*),(.*)&quot;</span>, <span class="dt">convert =</span> <span class="ot">TRUE</span>)
+paulscores %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">F value</span><span class="st">`</span>, <span class="dt">y =</span> PaulScore, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> Lower, <span class="dt">ymax =</span> Upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="fl">0.7</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="co">#scale_y_continuous(limits = c(0.2, 0.35)) +</span>
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;PaulScore(F)&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;PaulScore(F) by wiki, test group and value of F&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;With bootstrapped 95% confidence intervals.&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.3f&quot;</span>, PaulScore), <span class="dt">y =</span> Upper +<span class="st"> </span><span class="fl">0.01</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="fl">0.7</span>)) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>) </code></pre></div>
+<p><img src="index_files/figure-html/paulscores_eda2-1.png" /><!-- --></p>
 </div>
 <div id="engagement" class="section level3">
 <h3>Engagement</h3>
@@ -651,6 +697,32 @@ engagement_overall &lt;-<span class="st"> </span><span class="kw">cbind</span>(
 <img src="index_files/figure-html/engagement_overall_eda-1.png" alt="Figure 3: Clickthrough rates of test groups." />
 <p class="caption"><strong>Figure 3</strong>: Clickthrough rates of test groups.</p>
 </div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">engagement_overall &lt;-<span class="st"> </span>searches %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(results==<span class="st">&quot;some&quot;</span>) %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="dt">clickthroughs =</span> <span class="kw">sum</span>(clickthrough &gt;<span class="st"> </span><span class="dv">0</span>),
+            <span class="dt">searches =</span> <span class="kw">n</span>(), <span class="dt">ctr =</span> clickthroughs/searches) %&gt;%
+<span class="st">  </span>ungroup
+engagement_overall &lt;-<span class="st"> </span><span class="kw">cbind</span>(
+  engagement_overall,
+  <span class="kw">as.data.frame</span>(
+    binom:::<span class="kw">binom.bayes</span>(
+      engagement_overall$clickthroughs,
+      <span class="dt">n =</span> engagement_overall$searches)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]
+  )
+)
+engagement_overall %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="dv">1</span>, <span class="dt">y =</span> mean, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(), <span class="dt">expand =</span> <span class="kw">c</span>(<span class="fl">0.01</span>, <span class="fl">0.01</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Clickthrough rate&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Engagement with search results by test group and wiki&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>ctr), <span class="dt">y =</span> upper +<span class="st"> </span><span class="fl">0.0025</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/engagement_overall_eda2-1.png" /><!-- --></p>
 </div>
 <div id="first-clicked-results-position" class="section level3">
 <h3>First Clicked Result’s Position</h3>
@@ -692,6 +764,37 @@ first_clicked &lt;-<span class="st"> </span><span class="kw">cbind</span>(first_
 <img src="index_files/figure-html/first_clicked_position_eda-1.png" alt="Figure 4: First clicked result’s position by group." />
 <p class="caption"><strong>Figure 4</strong>: First clicked result’s position by group.</p>
 </div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">first_clicked &lt;-<span class="st"> </span>searches %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(results ==<span class="st"> &quot;some&quot;</span> &amp;<span class="st"> </span>clickthrough &amp;<span class="st"> </span>!<span class="kw">is.na</span>(<span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span>)) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span> =<span class="st"> </span><span class="kw">ifelse</span>(<span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span> &lt;<span class="st"> </span><span class="dv">4</span>, <span class="kw">safe_ordinals</span>(<span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span> +<span class="st"> </span><span class="dv">1</span>), <span class="st">&quot;5th or higher&quot;</span>)) %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span>tally %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">total =</span> <span class="kw">sum</span>(n), <span class="dt">prop =</span> n/total) %&gt;%
+<span class="st">  </span>ungroup
+<span class="kw">set.seed</span>(<span class="dv">0</span>)
+temp &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(binom:::<span class="kw">binom.bayes</span>(first_clicked$n, <span class="dt">n =</span> first_clicked$total, <span class="dt">tol =</span> .Machine$double.eps^<span class="fl">0.1</span>)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)])
+first_clicked &lt;-<span class="st"> </span><span class="kw">cbind</span>(first_clicked, temp); <span class="kw">rm</span>(temp)
+first_clicked %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="dv">1</span>, <span class="dt">y =</span> mean, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>prop), <span class="dt">y =</span> upper +<span class="st"> </span><span class="fl">0.0025</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(),
+                     <span class="dt">expand =</span> <span class="kw">c</span>(<span class="dv">0</span>, <span class="fl">0.005</span>), <span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.01</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki+<span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span>, <span class="dt">scale =</span> <span class="st">&quot;free_y&quot;</span>, <span class="dt">ncol=</span><span class="dv">5</span>, <span class="dt">nrow =</span> <span class="dv">3</span>) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Proportion of searches&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Position of the first clicked result&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;With 95% credible intervals&quot;</span>) +
+<span class="st">  </span><span class="co">#theme_minimal(base_family = &quot;Lato&quot;) +</span>
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>,
+        <span class="dt">panel.grid.major.x =</span> <span class="kw">element_blank</span>(),
+        <span class="dt">panel.grid.minor.x =</span> <span class="kw">element_blank</span>(),
+        <span class="dt">axis.ticks.x =</span> <span class="kw">element_blank</span>(),
+        <span class="dt">axis.text.x =</span> <span class="kw">element_blank</span>(),
+        <span class="dt">strip.background =</span> <span class="kw">element_rect</span>(<span class="dt">fill =</span> <span class="st">&quot;gray90&quot;</span>),
+        <span class="dt">panel.border =</span> <span class="kw">element_rect</span>(<span class="dt">color =</span> <span class="st">&quot;gray30&quot;</span>, <span class="dt">fill =</span> <span class="ot">NA</span>))</code></pre></div>
+<p><img src="index_files/figure-html/first_clicked_position_eda2-1.png" /><!-- --></p>
 </div>
 </div>
 
