@@ -216,3 +216,103 @@ first_clicked %>%
         axis.text.x = element_blank(),
         strip.background = element_rect(fill = "gray90"),
         panel.border = element_rect(color = "gray30", fill = NA))
+
+# No. of results clicked
+searches %>%
+  filter(clickthrough) %>%
+  group_by(wiki, `test group`) %>%
+  summarise(`no. results clicked`=mean(`no. results clicked`))
+
+# dwell time
+clickedResults %>%
+  split(.$`test group`) %>% 
+  map_df(function(df) {
+    seconds <- c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420)
+    seshs <- as.data.frame(do.call(cbind, lapply(seconds, function(second) {
+      return(sum(df$dwell_time >= second))
+    })))
+    names(seshs) <- seconds
+    return(cbind(`test group` = head(df$`test group`, 1), n = seshs$`0`, seshs, `450`=seshs$`420`))
+  }) %>%
+  gather(seconds, visits, -c(`test group`, n)) %>%
+  mutate(seconds = as.numeric(seconds)) %>%
+  group_by(`test group`, seconds) %>%
+  mutate(proportion = visits/n) %>%
+  ungroup() %>%
+  ggplot(aes(group=`test group`, color=`test group`)) +
+  geom_step(aes(x = seconds, y = proportion), direction = "hv") +
+  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.1)) +
+  theme(legend.position = "bottom")
+
+clickedResults %>%
+  split(list(.$wiki, .$`test group`)) %>% 
+  map_df(function(df) {
+    seconds <- c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420)
+    seshs <- as.data.frame(do.call(cbind, lapply(seconds, function(second) {
+      return(sum(df$dwell_time >= second))
+    })))
+    names(seshs) <- seconds
+    return(cbind(wiki=head(df$wiki, 1), `test group` = head(df$`test group`, 1), n = seshs$`0`, seshs, `450`=seshs$`420`))
+  }) %>%
+  gather(seconds, visits, -c(wiki, `test group`, n)) %>%
+  mutate(seconds = as.numeric(seconds)) %>%
+  group_by(wiki, `test group`, seconds) %>%
+  mutate(proportion = visits/n) %>%
+  ungroup() %>%
+  ggplot(aes(group=`test group`, color=`test group`)) +
+  geom_step(aes(x = seconds, y = proportion), direction = "hv") +
+  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.1)) +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ wiki, ncol=1, nrow =3)
+
+# Proportion of visits with scroll
+scroll_overall <- clickedResults %>%
+  group_by(`test group`) %>%
+  summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
+  ungroup
+scroll_overall <- cbind(
+  scroll_overall,
+  as.data.frame(
+    binom:::binom.bayes(
+      scroll_overall$scrolls,
+      n = scroll_overall$visits)[, c("mean", "lower", "upper")]
+  )
+)
+scroll_overall %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  labs(x = NULL, y = "Proportion of visits",
+       title = "Proportion of visits with scroll by test group") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  theme(legend.position = "bottom")
+
+scroll_overall <- clickedResults %>%
+  group_by(wiki, `test group`) %>%
+  summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
+  ungroup
+scroll_overall <- cbind(
+  scroll_overall,
+  as.data.frame(
+    binom:::binom.bayes(
+      scroll_overall$scrolls,
+      n = scroll_overall$visits)[, c("mean", "lower", "upper")]
+  )
+)
+scroll_overall %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  labs(x = NULL, y = "Proportion of visits",
+       title = "Proportion of visits with scroll by test group and wiki") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  facet_wrap(~ wiki, ncol = 3) +
+  theme(legend.position = "bottom")

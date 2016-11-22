@@ -22,10 +22,12 @@ events <- wmf::mysql_read("# BM25 A/B test EL data
                           event_searchSessionId AS search_id,
                           event_pageViewId AS page_id,
                           event_searchToken AS cirrus_id,
+                          event_scroll AS scroll,
+                          event_checkin AS checkin,
                           event_query AS query,
                           event_hitsReturned AS n_results_returned,
                           event_msToDisplayResults AS load_time,
-                          CASE WHEN event_action = 'searchResultPage' THEN 'SERP' ELSE 'click' END AS action,
+                          event_action AS action,
                           event_position AS position_clicked
                           FROM TestSearchSatisfaction2_15922352
                           WHERE
@@ -37,6 +39,10 @@ events <- wmf::mysql_read("# BM25 A/B test EL data
                           (event_action = 'searchResultPage' AND event_hitsReturned IS NOT NULL AND event_msToDisplayResults IS NOT NULL)
                           OR
                           (event_action = 'click' AND event_position IS NOT NULL AND event_position > -1)
+                          OR
+                          (event_action = 'visitPage' AND event_pageViewId IS NOT NULL)
+                          OR
+                          (event_action = 'checkin' AND event_checkin IS NOT NULL AND event_pageViewId IS NOT NULL)
                           )
                           ORDER BY date, wiki, session_id, search_id, page_id, action DESC, timestamp;", "log")
 # Fix dates & times:

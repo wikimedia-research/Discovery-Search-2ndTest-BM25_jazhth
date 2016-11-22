@@ -12,7 +12,7 @@ query_score <- function(positions, F) {
     # no clicks were made
     return(0)
   } else {
-    positions <- positions[!is.na(positions)] # when operating on 'events' dataset, SERP events won't have positions
+    positions <- positions[!is.na(positions)] # when operating on 'events' dataset, searchResultPage events won't have positions
     return(sum(F^positions))
   }
 }

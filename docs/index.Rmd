@@ -75,7 +75,7 @@ print_caption <- function(formatted_caption) {
 #code_caps(name = "bm25_query", caption = "Query used to extract BM25 test data from our event logging database.", display = FALSE)
 #table_caps(name = "clustering_example", caption = "Example of how choice of linkage affects clustering of queries from a real search session.", display = FALSE)
 table_caps(name = "group_counts", caption = "Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
-table_caps(name = "group_counts2", caption = "After SERP De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
+table_caps(name = "group_counts2", caption = "After searchResultPage De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
 #figure_caps("query_reform_counts", "Proportions of searches with 0, 1, 2, and 3+ query reformulations.", display = FALSE)
 #figure_caps("query_reform_prop", "Proportions of searches where user reformulated their query.", display = FALSE)
 figure_caps("zrr", "Zero results rate is the proportion of searches in which the user received zero results.", display = FALSE)
@@ -106,7 +106,7 @@ query_score <- function(positions, F) {
     # no clicks were made
     return(0)
    } else {
-     positions <- positions[!is.na(positions)] # when operating on 'events' dataset, SERP events won't have positions
+     positions <- positions[!is.na(positions)] # when operating on 'events' dataset, searchResultPage events won't have positions
   return(sum(F^positions))
    }
 }
@@ -121,10 +121,17 @@ bootstrap_mean <- function(x, m, seed = NULL) {
 ```
 
 ## Results
+
+### Data
+
 ```{r data, cache = TRUE}
 # Import events fetched from MySQL
 load(path("data/ab-test_bm25.RData"))
 events <- events[!duplicated(events$event_id),]
+events <- events %>%
+  group_by(date, wiki, test_group, session_id, search_id) %>%
+  filter("searchResultPage" %in% action) %>%
+  ungroup %>% as.data.frame() # remove search_id without SERP asscociated
 events$test_group <- factor(
   events$test_group,
   levels = c("bm25:control", "bm25:inclinks_pv"),
@@ -134,7 +141,7 @@ cirrus <- cirrus[!duplicated(cirrus),]
 events <- left_join(events, cirrus, by = c("event_id", "page_id", "cirrus_id"))
 rm(cirrus)
 ```
-The test was deployed on October 27th (Is it? Phab ticket showed the test deployed on Oct 25, but the earliest data I've got is on 27) and ran for a week (thwiki ran longer, till Nov 15. Not sure if it is still running now..), collecting a total of `r polloi::compress(nrow(events), 1)` events from `r polloi::compress(length(unique(events$search_id)), 1)` unique sessions. See `r table_caps("group_counts", display = "cite")` for counts broken down by wiki and test group.
+The test was deployed on October 27th and ran for a week (thwiki ran longer, till Nov 15.), collecting a total of `r polloi::compress(nrow(events), 1)` events from `r polloi::compress(length(unique(events$search_id)), 1)` unique sessions. See `r table_caps("group_counts", display = "cite")` for counts broken down by wiki and test group.
 
 ```{r summary, results = "asis", dependson = "data"}
 events_summary <- events %>%
@@ -142,7 +149,7 @@ events_summary <- events %>%
   summarize(`Search sessions` = length(unique(search_id)), `Events recorded` = n()) %>% ungroup %>%
   {
     rbind(., tibble(
-      `wiki` = "Total",
+      `wiki` = "All Wikis",
       `Test group` = "Total",
       `Search sessions` = sum(.$`Search sessions`),
       `Events recorded` = sum(.$`Events recorded`)
@@ -156,39 +163,39 @@ knitr::kable(events_summary, format = "markdown", align = c("l", "l", "r", "r"))
 print_caption(format_caption(table_caps, "group_counts"))
 ```
 
-### SERP De-duplication
+An issue we noticed with the event logging is that when the user goes to the next page of search results or clicks the Back button after visiting a search result, a new page ID is generated for the search results page. The page ID is how we connect click events to search result page events. There is currently a Phabricator ticket ([T146337](https://phabricator.wikimedia.org/T146337)) for addressing these issues. For this analysis, we de-duplicated by connecting search engine results page (searchResultPage) events that have the exact same search query, and then connected click events together based on the searchResultPage connectivity.
 
-An issue we noticed with the event logging is that when the user goes to the next page of search results or clicks the Back button after visiting a search result, a new page ID is generated for the search results page. The page ID is how we connect click events to search result page events. There is currently a Phabricator ticket ([T146337](https://phabricator.wikimedia.org/T146337)) for addressing these issues. For this analysis, we de-duplicated by connecting search engine results page (SERP) events that have the exact same search query, and then connected click events together based on the SERP connectivity.
-
-```{r serp_deduplication, dependson = "data", cache = TRUE}
+```{r searchResultPage_deduplication, dependson = "data", cache = TRUE}
 temp <- events %>%
-  filter(action == "SERP") %>%
+  filter(action == "searchResultPage") %>%
   group_by(session_id, search_id, query) %>%
   mutate(new_page_id = min(page_id)) %>%
   ungroup %>%
   select(c(page_id, new_page_id)) %>%
   distinct
 events <- left_join(events, temp, by = "page_id"); rm(temp)
+events$new_page_id[is.na(events$new_page_id)] <- events$page_id[is.na(events$new_page_id)] 
 temp <- events %>%
-  filter(action == "SERP") %>%
+  filter(action == "searchResultPage") %>%
   arrange(new_page_id, ts) %>%
   mutate(dupe = duplicated(new_page_id, fromLast = FALSE)) %>%
   select(c(event_id, dupe))
 events <- left_join(events, temp, by = "event_id"); rm(temp)
-events$dupe[events$action == "click"] <- FALSE
+events$dupe[events$action != "searchResultPage"] <- FALSE
 events <- events[!events$dupe & !is.na(events$new_page_id), ] %>%
   select(-c(page_id, dupe)) %>%
   rename(page_id = new_page_id) %>%
   arrange(date, session_id, search_id, page_id, desc(action), ts)
 ```
-```{r aggregation, dependson = c("serp_deduplication", "paulscore_functions"), cache = TRUE}
-# Summarize on a page-by-page basis:
+```{r aggregation, dependson = c("searchResultPage_deduplication", "paulscore_functions"), cache = TRUE}
+# Summarize on a page-by-page basis for each SERP:
 searches <- events %>%
   group_by(wiki, `test group` = test_group, session_id, search_id, page_id) %>%
-  filter("SERP" %in% action) %>% # filter out searches where we have clicks but not SERP events
+  filter("searchResultPage" %in% action) %>% # filter out searches where we have clicks but not searchResultPage events
   summarize(ts = ts[1], query = query[1],
             results = ifelse(n_results_returned[1] > 0, "some", "zero"),
             clickthrough = "click" %in% action,
+            `no. results clicked` = length(unique(position_clicked))-1,
             `first clicked result's position` = ifelse(clickthrough, position_clicked[2], NA),
             `result page IDs` = result_pids[1],
             `Query score (F=0.1)` = query_score(position_clicked, 0.1),
@@ -196,15 +203,15 @@ searches <- events %>%
             `Query score (F=0.9)` = query_score(position_clicked, 0.9)) %>%
   arrange(ts)
 ```
-After de-duplicating, we collapsed `r polloi::compress(nrow(events), 1)` (SERP and click) events into `r polloi::compress(nrow(searches), 1)` searches. See `r table_caps("group_counts2", display = "cite")` for counts broken down by wiki and test group.
+After de-duplicating, we collapsed `r polloi::compress(nrow(events), 1)` (searchResultPage and click) events into `r polloi::compress(nrow(searches), 1)` searches. See `r table_caps("group_counts2", display = "cite")` for counts broken down by wiki and test group.
 
-```{r summary2, results = "asis", dependson = "data"}
+```{r summary2, results = "asis", dependson = c("searchResultPage_deduplication","aggregation")}
 events_summary2 <- events %>%
   group_by(wiki, `Test group` = test_group) %>%
   summarize(`Search sessions` = length(unique(search_id)), `Events recorded` = n()) %>% ungroup %>%
   {
     rbind(., tibble(
-      `wiki` = "Total",
+      `wiki` = "All Wikis",
       `Test group` = "Total",
       `Search sessions` = sum(.$`Search sessions`),
       `Events recorded` = sum(.$`Events recorded`)
@@ -217,7 +224,7 @@ searches_summary <- searches %>%
   summarize(`Search sessions` = length(unique(search_id)), `Searches recorded` = n()) %>% ungroup %>%
   {
     rbind(., tibble(
-      `wiki` = "Total",
+      `wiki` = "All Wikis",
       `Test group` = "Total",
       `Search sessions` = sum(.$`Search sessions`),
       `Searches recorded` = sum(.$`Searches recorded`)
@@ -230,6 +237,34 @@ knitr::kable(inner_join(searches_summary, events_summary2, by=c("wiki", "Test gr
 ```
 ```{r summary_caption2, results = "asis", echo = FALSE}
 print_caption(format_caption(table_caps, "group_counts2"))
+```
+
+There are `r polloi::compress(length(unique(events$page_id[events$action=="visitPage"])), 1)` visitPage events. See the table below for counts broken down by wiki and test group.
+
+```{r aggregation_visits, dependson = "searchResultPage_deduplication", cache = TRUE}
+# Summarize on a page-by-page basis for each visitPage:
+clickedResults <- events %>%
+  group_by(wiki, `test group` = test_group, session_id, search_id, page_id) %>%
+  filter("visitPage" %in% action) %>% #only checkin and visitPage action
+  summarize(ts = ts[1], 
+            dwell_time=ifelse("checkin"%in% action, max(checkin, na.rm=T), 0),
+            scroll=sum(scroll)>0) %>%
+  arrange(ts)
+clickedResults$dwell_time[is.na(clickedResults$dwell_time)] <- 0
+```
+```{r summary3, results = "asis", dependson = "aggregation_visits"}
+clickedResults_summary <- clickedResults %>%
+  group_by(wiki, `Test group` = `test group`) %>%
+  summarize(`Visited pages` = length(unique(page_id))) %>% ungroup %>%
+  {
+    rbind(., tibble(
+      `wiki` = "All Wikis",
+      `Test group` = "Total",
+      `Visited pages` = sum(.$`Visited pages`)
+    ))
+  } %>%
+  mutate(`Visited pages` = prettyNum(`Visited pages`, big.mark = ","))
+knitr::kable(clickedResults_summary, format = "markdown", align = c("l", "l", "r", "r"))
 ```
 
 ### Zero Results Rate
@@ -488,4 +523,112 @@ first_clicked %>%
         axis.text.x = element_blank(),
         strip.background = element_rect(fill = "gray90"),
         panel.border = element_rect(color = "gray30", fill = NA))
+```
+
+### Dwell Time per visit page
+
+The figures below show the survival curve for each test group and wikis. Except zhwiki, users are more likely to stay longer on visit pages.
+
+```{r dwell_time_eda}
+clickedResults %>%
+  split(.$`test group`) %>% 
+  map_df(function(df) {
+    seconds <- c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420)
+    seshs <- as.data.frame(do.call(cbind, lapply(seconds, function(second) {
+      return(sum(df$dwell_time >= second))
+    })))
+    names(seshs) <- seconds
+    return(cbind(`test group` = head(df$`test group`, 1), n = seshs$`0`, seshs, `450`=seshs$`420`))
+  }) %>%
+  gather(seconds, visits, -c(`test group`, n)) %>%
+  mutate(seconds = as.numeric(seconds)) %>%
+  group_by(`test group`, seconds) %>%
+  mutate(proportion = visits/n) %>%
+  ungroup() %>%
+  ggplot(aes(group=`test group`, color=`test group`)) +
+  geom_step(aes(x = seconds, y = proportion), direction = "hv") +
+  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.1)) +
+  theme(legend.position = "bottom")
+```
+
+```{r dwell_time_eda_wiki}
+clickedResults %>%
+  split(list(.$wiki, .$`test group`)) %>% 
+  map_df(function(df) {
+    seconds <- c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420)
+    seshs <- as.data.frame(do.call(cbind, lapply(seconds, function(second) {
+      return(sum(df$dwell_time >= second))
+    })))
+    names(seshs) <- seconds
+    return(cbind(wiki=head(df$wiki, 1), `test group` = head(df$`test group`, 1), n = seshs$`0`, seshs, `450`=seshs$`420`))
+  }) %>%
+  gather(seconds, visits, -c(wiki, `test group`, n)) %>%
+  mutate(seconds = as.numeric(seconds)) %>%
+  group_by(wiki, `test group`, seconds) %>%
+  mutate(proportion = visits/n) %>%
+  ungroup() %>%
+  ggplot(aes(group=`test group`, color=`test group`)) +
+  geom_step(aes(x = seconds, y = proportion), direction = "hv") +
+  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.1)) +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ wiki, ncol=1, nrow =3)
+```
+
+### Proportion of visit pages with scroll
+
+Users in the test group are more likely to scroll on the visit page, but the differences are not statistically significant.
+
+```{r scroll_eda}
+scroll_overall <- clickedResults %>%
+  group_by(`test group`) %>%
+  summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
+  ungroup
+scroll_overall <- cbind(
+  scroll_overall,
+  as.data.frame(
+    binom:::binom.bayes(
+      scroll_overall$scrolls,
+      n = scroll_overall$visits)[, c("mean", "lower", "upper")]
+  )
+)
+scroll_overall %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  labs(x = NULL, y = "Proportion of visits",
+       title = "Proportion of visits with scroll by test group") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  theme(legend.position = "bottom")
+```
+
+```{r scroll_eda_wiki}
+scroll_overall <- clickedResults %>%
+  group_by(wiki, `test group`) %>%
+  summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
+  ungroup
+scroll_overall <- cbind(
+  scroll_overall,
+  as.data.frame(
+    binom:::binom.bayes(
+      scroll_overall$scrolls,
+      n = scroll_overall$visits)[, c("mean", "lower", "upper")]
+  )
+)
+scroll_overall %>%
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  labs(x = NULL, y = "Proportion of visits",
+       title = "Proportion of visits with scroll by test group and wiki") +
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), y = upper + 0.0025, vjust = "bottom"),
+            position = position_dodge(width = 1)) +
+  facet_wrap(~ wiki, ncol = 3) +
+  theme(legend.position = "bottom")
 ```

@@ -16,7 +16,7 @@
 <meta name="author" content="Deb Tankersley (Product Management)" />
 <meta name="author" content="Chelsy Xie (Analysis &amp; Report)" />
 
-<meta name="date" content="2016-11-17" />
+<meta name="date" content="2016-11-22" />
 
 <title>Second BM25 A/B test (ja, zh, th) Analysis</title>
 
@@ -284,7 +284,7 @@ div.tocify {
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:MPopov_(WMF)'>Mikhail Popov</a> (Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:DTankersley_(WMF)'>Deb Tankersley</a> (Product Management)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:CXie_(WMF)'>Chelsy Xie</a> (Analysis &amp; Report)</em></h4>
-<h4 class="date"><em>17 November 2016</em></h4>
+<h4 class="date"><em>22 November 2016</em></h4>
 
 </div>
 
@@ -319,7 +319,7 @@ query_score &lt;-<span class="st"> </span>function(positions, F) {
     <span class="co"># no clicks were made</span>
     <span class="kw">return</span>(<span class="dv">0</span>)
    } else {
-     positions &lt;-<span class="st"> </span>positions[!<span class="kw">is.na</span>(positions)] <span class="co"># when operating on &#39;events&#39; dataset, SERP events won&#39;t have positions</span>
+     positions &lt;-<span class="st"> </span>positions[!<span class="kw">is.na</span>(positions)] <span class="co"># when operating on &#39;events&#39; dataset, searchResultPage events won&#39;t have positions</span>
   <span class="kw">return</span>(<span class="kw">sum</span>(F^positions))
    }
 }
@@ -333,9 +333,15 @@ bootstrap_mean &lt;-<span class="st"> </span>function(x, m, <span class="dt">see
 }</code></pre></div>
 <div id="results" class="section level2">
 <h2>Results</h2>
+<div id="data" class="section level3">
+<h3>Data</h3>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Import events fetched from MySQL</span>
 <span class="kw">load</span>(<span class="kw">path</span>(<span class="st">&quot;data/ab-test_bm25.RData&quot;</span>))
 events &lt;-<span class="st"> </span>events[!<span class="kw">duplicated</span>(events$event_id),]
+events &lt;-<span class="st"> </span>events %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(date, wiki, test_group, session_id, search_id) %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(<span class="st">&quot;searchResultPage&quot;</span> %in%<span class="st"> </span>action) %&gt;%
+<span class="st">  </span>ungroup %&gt;%<span class="st"> </span><span class="kw">as.data.frame</span>() <span class="co"># remove search_id without SERP asscociated</span>
 events$test_group &lt;-<span class="st"> </span><span class="kw">factor</span>(
   events$test_group,
   <span class="dt">levels =</span> <span class="kw">c</span>(<span class="st">&quot;bm25:control&quot;</span>, <span class="st">&quot;bm25:inclinks_pv&quot;</span>),
@@ -344,13 +350,13 @@ cirrus &lt;-<span class="st"> </span>readr::<span class="kw">read_tsv</span>(<sp
 cirrus &lt;-<span class="st"> </span>cirrus[!<span class="kw">duplicated</span>(cirrus),]
 events &lt;-<span class="st"> </span><span class="kw">left_join</span>(events, cirrus, <span class="dt">by =</span> <span class="kw">c</span>(<span class="st">&quot;event_id&quot;</span>, <span class="st">&quot;page_id&quot;</span>, <span class="st">&quot;cirrus_id&quot;</span>))
 <span class="kw">rm</span>(cirrus)</code></pre></div>
-<p>The test was deployed on October 27th (Is it? Phab ticket showed the test deployed on Oct 25, but the earliest data I’ve got is on 27) and ran for a week (thwiki ran longer, till Nov 15. Not sure if it is still running now..), collecting a total of 104.6K events from 36.4K unique sessions. See Table 1 for counts broken down by wiki and test group.</p>
+<p>The test was deployed on October 27th and ran for a week (thwiki ran longer, till Nov 15.), collecting a total of 230.2K events from 36.1K unique sessions. See Table 1 for counts broken down by wiki and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">events_summary &lt;-<span class="st"> </span>events %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> </span>test_group) %&gt;%
 <span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(search_id)), <span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">n</span>()) %&gt;%<span class="st"> </span>ungroup %&gt;%
 <span class="st">  </span>{
     <span class="kw">rbind</span>(., <span class="kw">tibble</span>(
-      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
+      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;All Wikis&quot;</span>,
       <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
       <span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span>),
       <span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span>)
@@ -361,8 +367,8 @@ events &lt;-<span class="st"> </span><span class="kw">left_join</span>(events, c
 knitr::<span class="kw">kable</span>(events_summary, <span class="dt">format =</span> <span class="st">&quot;markdown&quot;</span>, <span class="dt">align =</span> <span class="kw">c</span>(<span class="st">&quot;l&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;r&quot;</span>, <span class="st">&quot;r&quot;</span>))</code></pre></div>
 <table>
 <colgroup>
-<col width="6%" />
-<col width="63%" />
+<col width="9%" />
+<col width="61%" />
 <col width="14%" />
 <col width="14%" />
 </colgroup>
@@ -378,92 +384,92 @@ knitr::<span class="kw">kable</span>(events_summary, <span class="dt">format =</
 <tr class="odd">
 <td align="left">jawiki</td>
 <td align="left">Control Group (tf–idf)</td>
-<td align="right">7,667</td>
-<td align="right">23,053</td>
+<td align="right">7,579</td>
+<td align="right">54,261</td>
 </tr>
 <tr class="even">
 <td align="left">jawiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
-<td align="right">7,704</td>
-<td align="right">23,995</td>
+<td align="right">7,610</td>
+<td align="right">59,808</td>
 </tr>
 <tr class="odd">
 <td align="left">thwiki</td>
 <td align="left">Control Group (tf–idf)</td>
-<td align="right">3,897</td>
-<td align="right">11,235</td>
+<td align="right">3,889</td>
+<td align="right">18,954</td>
 </tr>
 <tr class="even">
 <td align="left">thwiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
-<td align="right">4,062</td>
-<td align="right">11,694</td>
+<td align="right">4,055</td>
+<td align="right">21,217</td>
 </tr>
 <tr class="odd">
 <td align="left">zhwiki</td>
 <td align="left">Control Group (tf–idf)</td>
-<td align="right">6,522</td>
-<td align="right">17,462</td>
+<td align="right">6,510</td>
+<td align="right">37,561</td>
 </tr>
 <tr class="even">
 <td align="left">zhwiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
-<td align="right">6,503</td>
-<td align="right">17,148</td>
+<td align="right">6,478</td>
+<td align="right">38,382</td>
 </tr>
 <tr class="odd">
+<td align="left">All Wikis</td>
 <td align="left">Total</td>
-<td align="left">Total</td>
-<td align="right">36,355</td>
-<td align="right">104,587</td>
+<td align="right">36,121</td>
+<td align="right">230,183</td>
 </tr>
 </tbody>
 </table>
 <p class="caption">
 <strong>Table 1</strong>: Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).
 </p>
-<div id="serp-de-duplication" class="section level3">
-<h3>SERP De-duplication</h3>
-<p>An issue we noticed with the event logging is that when the user goes to the next page of search results or clicks the Back button after visiting a search result, a new page ID is generated for the search results page. The page ID is how we connect click events to search result page events. There is currently a Phabricator ticket (<a href="https://phabricator.wikimedia.org/T146337">T146337</a>) for addressing these issues. For this analysis, we de-duplicated by connecting search engine results page (SERP) events that have the exact same search query, and then connected click events together based on the SERP connectivity.</p>
+<p>An issue we noticed with the event logging is that when the user goes to the next page of search results or clicks the Back button after visiting a search result, a new page ID is generated for the search results page. The page ID is how we connect click events to search result page events. There is currently a Phabricator ticket (<a href="https://phabricator.wikimedia.org/T146337">T146337</a>) for addressing these issues. For this analysis, we de-duplicated by connecting search engine results page (searchResultPage) events that have the exact same search query, and then connected click events together based on the searchResultPage connectivity.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">temp &lt;-<span class="st"> </span>events %&gt;%
-<span class="st">  </span><span class="kw">filter</span>(action ==<span class="st"> &quot;SERP&quot;</span>) %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(action ==<span class="st"> &quot;searchResultPage&quot;</span>) %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(session_id, search_id, query) %&gt;%
 <span class="st">  </span><span class="kw">mutate</span>(<span class="dt">new_page_id =</span> <span class="kw">min</span>(page_id)) %&gt;%
 <span class="st">  </span>ungroup %&gt;%
 <span class="st">  </span><span class="kw">select</span>(<span class="kw">c</span>(page_id, new_page_id)) %&gt;%
 <span class="st">  </span>distinct
 events &lt;-<span class="st"> </span><span class="kw">left_join</span>(events, temp, <span class="dt">by =</span> <span class="st">&quot;page_id&quot;</span>); <span class="kw">rm</span>(temp)
+events$new_page_id[<span class="kw">is.na</span>(events$new_page_id)] &lt;-<span class="st"> </span>events$page_id[<span class="kw">is.na</span>(events$new_page_id)] 
 temp &lt;-<span class="st"> </span>events %&gt;%
-<span class="st">  </span><span class="kw">filter</span>(action ==<span class="st"> &quot;SERP&quot;</span>) %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(action ==<span class="st"> &quot;searchResultPage&quot;</span>) %&gt;%
 <span class="st">  </span><span class="kw">arrange</span>(new_page_id, ts) %&gt;%
 <span class="st">  </span><span class="kw">mutate</span>(<span class="dt">dupe =</span> <span class="kw">duplicated</span>(new_page_id, <span class="dt">fromLast =</span> <span class="ot">FALSE</span>)) %&gt;%
 <span class="st">  </span><span class="kw">select</span>(<span class="kw">c</span>(event_id, dupe))
 events &lt;-<span class="st"> </span><span class="kw">left_join</span>(events, temp, <span class="dt">by =</span> <span class="st">&quot;event_id&quot;</span>); <span class="kw">rm</span>(temp)
-events$dupe[events$action ==<span class="st"> &quot;click&quot;</span>] &lt;-<span class="st"> </span><span class="ot">FALSE</span>
+events$dupe[events$action !=<span class="st"> &quot;searchResultPage&quot;</span>] &lt;-<span class="st"> </span><span class="ot">FALSE</span>
 events &lt;-<span class="st"> </span>events[!events$dupe &amp;<span class="st"> </span>!<span class="kw">is.na</span>(events$new_page_id), ] %&gt;%
 <span class="st">  </span><span class="kw">select</span>(-<span class="kw">c</span>(page_id, dupe)) %&gt;%
 <span class="st">  </span><span class="kw">rename</span>(<span class="dt">page_id =</span> new_page_id) %&gt;%
 <span class="st">  </span><span class="kw">arrange</span>(date, session_id, search_id, page_id, <span class="kw">desc</span>(action), ts)</code></pre></div>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Summarize on a page-by-page basis:</span>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Summarize on a page-by-page basis for each SERP:</span>
 searches &lt;-<span class="st"> </span>events %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span> =<span class="st"> </span>test_group, session_id, search_id, page_id) %&gt;%
-<span class="st">  </span><span class="kw">filter</span>(<span class="st">&quot;SERP&quot;</span> %in%<span class="st"> </span>action) %&gt;%<span class="st"> </span><span class="co"># filter out searches where we have clicks but not SERP events</span>
+<span class="st">  </span><span class="kw">filter</span>(<span class="st">&quot;searchResultPage&quot;</span> %in%<span class="st"> </span>action) %&gt;%<span class="st"> </span><span class="co"># filter out searches where we have clicks but not searchResultPage events</span>
 <span class="st">  </span><span class="kw">summarize</span>(<span class="dt">ts =</span> ts[<span class="dv">1</span>], <span class="dt">query =</span> query[<span class="dv">1</span>],
             <span class="dt">results =</span> <span class="kw">ifelse</span>(n_results_returned[<span class="dv">1</span>] &gt;<span class="st"> </span><span class="dv">0</span>, <span class="st">&quot;some&quot;</span>, <span class="st">&quot;zero&quot;</span>),
             <span class="dt">clickthrough =</span> <span class="st">&quot;click&quot;</span> %in%<span class="st"> </span>action,
+            <span class="st">`</span><span class="dt">no. results clicked</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(position_clicked))-<span class="dv">1</span>,
             <span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span> =<span class="st"> </span><span class="kw">ifelse</span>(clickthrough, position_clicked[<span class="dv">2</span>], <span class="ot">NA</span>),
             <span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span> =<span class="st"> </span>result_pids[<span class="dv">1</span>],
             <span class="st">`</span><span class="dt">Query score (F=0.1)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.1</span>),
             <span class="st">`</span><span class="dt">Query score (F=0.5)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.5</span>),
             <span class="st">`</span><span class="dt">Query score (F=0.9)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.9</span>)) %&gt;%
 <span class="st">  </span><span class="kw">arrange</span>(ts)</code></pre></div>
-<p>After de-duplicating, we collapsed 87.5K (SERP and click) events into 64.5K searches. See Table 2 for counts broken down by wiki and test group.</p>
+<p>After de-duplicating, we collapsed 213.4K (searchResultPage and click) events into 64.5K searches. See Table 2 for counts broken down by wiki and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">events_summary2 &lt;-<span class="st"> </span>events %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> </span>test_group) %&gt;%
 <span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(search_id)), <span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">n</span>()) %&gt;%<span class="st"> </span>ungroup %&gt;%
 <span class="st">  </span>{
     <span class="kw">rbind</span>(., <span class="kw">tibble</span>(
-      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
+      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;All Wikis&quot;</span>,
       <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
       <span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span>),
       <span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Events recorded</span><span class="st">`</span>)
@@ -476,7 +482,7 @@ searches_summary &lt;-<span class="st"> </span>searches %&gt;%
 <span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(search_id)), <span class="st">`</span><span class="dt">Searches recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">n</span>()) %&gt;%<span class="st"> </span>ungroup %&gt;%
 <span class="st">  </span>{
     <span class="kw">rbind</span>(., <span class="kw">tibble</span>(
-      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
+      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;All Wikis&quot;</span>,
       <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
       <span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Search sessions</span><span class="st">`</span>),
       <span class="st">`</span><span class="dt">Searches recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Searches recorded</span><span class="st">`</span>)
@@ -486,12 +492,12 @@ searches_summary &lt;-<span class="st"> </span>searches %&gt;%
          <span class="st">`</span><span class="dt">Searches recorded</span><span class="st">`</span> =<span class="st"> </span><span class="kw">prettyNum</span>(<span class="st">`</span><span class="dt">Searches recorded</span><span class="st">`</span>, <span class="dt">big.mark =</span> <span class="st">&quot;,&quot;</span>))
 knitr::<span class="kw">kable</span>(<span class="kw">inner_join</span>(searches_summary, events_summary2, <span class="dt">by=</span><span class="kw">c</span>(<span class="st">&quot;wiki&quot;</span>, <span class="st">&quot;Test group&quot;</span>, <span class="st">&quot;Search sessions&quot;</span>)), 
              <span class="dt">format =</span> <span class="st">&quot;markdown&quot;</span>, <span class="dt">align =</span> <span class="kw">c</span>(<span class="st">&quot;l&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;r&quot;</span>, <span class="st">&quot;r&quot;</span>, <span class="st">&quot;r&quot;</span>))</code></pre></div>
-<table style="width:100%;">
+<table>
 <colgroup>
-<col width="5%" />
-<col width="54%" />
+<col width="8%" />
+<col width="53%" />
 <col width="12%" />
-<col width="14%" />
+<col width="13%" />
 <col width="12%" />
 </colgroup>
 <thead>
@@ -509,55 +515,128 @@ knitr::<span class="kw">kable</span>(<span class="kw">inner_join</span>(searches
 <td align="left">Control Group (tf–idf)</td>
 <td align="right">7,579</td>
 <td align="right">13,839</td>
-<td align="right">19,517</td>
+<td align="right">50,845</td>
 </tr>
 <tr class="even">
 <td align="left">jawiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
 <td align="right">7,610</td>
 <td align="right">13,982</td>
-<td align="right">20,148</td>
+<td align="right">56,097</td>
 </tr>
 <tr class="odd">
 <td align="left">thwiki</td>
 <td align="left">Control Group (tf–idf)</td>
-<td align="right">3,888</td>
-<td align="right">6,999</td>
-<td align="right">8,653</td>
+<td align="right">3,889</td>
+<td align="right">7,005</td>
+<td align="right">16,379</td>
 </tr>
 <tr class="even">
 <td align="left">thwiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
-<td align="right">4,054</td>
-<td align="right">7,084</td>
-<td align="right">8,945</td>
+<td align="right">4,055</td>
+<td align="right">7,086</td>
+<td align="right">18,481</td>
 </tr>
 <tr class="odd">
 <td align="left">zhwiki</td>
 <td align="left">Control Group (tf–idf)</td>
 <td align="right">6,510</td>
 <td align="right">11,450</td>
-<td align="right">15,145</td>
+<td align="right">35,262</td>
 </tr>
 <tr class="even">
 <td align="left">zhwiki</td>
 <td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
 <td align="right">6,478</td>
 <td align="right">11,173</td>
-<td align="right">15,109</td>
+<td align="right">36,373</td>
 </tr>
 <tr class="odd">
+<td align="left">All Wikis</td>
 <td align="left">Total</td>
-<td align="left">Total</td>
-<td align="right">36,119</td>
-<td align="right">64,527</td>
-<td align="right">87,517</td>
+<td align="right">36,121</td>
+<td align="right">64,535</td>
+<td align="right">213,437</td>
 </tr>
 </tbody>
 </table>
 <p class="caption">
-<strong>Table 2</strong>: After SERP De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).
+<strong>Table 2</strong>: After searchResultPage De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).
 </p>
+<p>There are 22.1K visitPage events. See the table below for counts broken down by wiki and test group.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Summarize on a page-by-page basis for each visitPage:</span>
+clickedResults &lt;-<span class="st"> </span>events %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span> =<span class="st"> </span>test_group, session_id, search_id, page_id) %&gt;%
+<span class="st">  </span><span class="kw">filter</span>(<span class="st">&quot;visitPage&quot;</span> %in%<span class="st"> </span>action) %&gt;%<span class="st"> </span><span class="co">#only checkin and visitPage action</span>
+<span class="st">  </span><span class="kw">summarize</span>(<span class="dt">ts =</span> ts[<span class="dv">1</span>], 
+            <span class="dt">dwell_time=</span><span class="kw">ifelse</span>(<span class="st">&quot;checkin&quot;</span>%in%<span class="st"> </span>action, <span class="kw">max</span>(checkin, <span class="dt">na.rm=</span>T), <span class="dv">0</span>),
+            <span class="dt">scroll=</span><span class="kw">sum</span>(scroll)&gt;<span class="dv">0</span>) %&gt;%
+<span class="st">  </span><span class="kw">arrange</span>(ts)
+clickedResults$dwell_time[<span class="kw">is.na</span>(clickedResults$dwell_time)] &lt;-<span class="st"> </span><span class="dv">0</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">clickedResults_summary &lt;-<span class="st"> </span>clickedResults %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> `</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">Visited pages</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(page_id))) %&gt;%<span class="st"> </span>ungroup %&gt;%
+<span class="st">  </span>{
+    <span class="kw">rbind</span>(., <span class="kw">tibble</span>(
+      <span class="st">`</span><span class="dt">wiki</span><span class="st">`</span> =<span class="st"> &quot;All Wikis&quot;</span>,
+      <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> &quot;Total&quot;</span>,
+      <span class="st">`</span><span class="dt">Visited pages</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(.$<span class="st">`</span><span class="dt">Visited pages</span><span class="st">`</span>)
+    ))
+  } %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="st">`</span><span class="dt">Visited pages</span><span class="st">`</span> =<span class="st"> </span><span class="kw">prettyNum</span>(<span class="st">`</span><span class="dt">Visited pages</span><span class="st">`</span>, <span class="dt">big.mark =</span> <span class="st">&quot;,&quot;</span>))
+knitr::<span class="kw">kable</span>(clickedResults_summary, <span class="dt">format =</span> <span class="st">&quot;markdown&quot;</span>, <span class="dt">align =</span> <span class="kw">c</span>(<span class="st">&quot;l&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;r&quot;</span>, <span class="st">&quot;r&quot;</span>))</code></pre></div>
+<table style="width:100%;">
+<colgroup>
+<col width="11%" />
+<col width="73%" />
+<col width="15%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">wiki</th>
+<th align="left">Test group</th>
+<th align="right">Visited pages</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">jawiki</td>
+<td align="left">Control Group (tf–idf)</td>
+<td align="right">5,431</td>
+</tr>
+<tr class="even">
+<td align="left">jawiki</td>
+<td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
+<td align="right">5,954</td>
+</tr>
+<tr class="odd">
+<td align="left">thwiki</td>
+<td align="left">Control Group (tf–idf)</td>
+<td align="right">1,554</td>
+</tr>
+<tr class="even">
+<td align="left">thwiki</td>
+<td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
+<td align="right">1,776</td>
+</tr>
+<tr class="odd">
+<td align="left">zhwiki</td>
+<td align="left">Control Group (tf–idf)</td>
+<td align="right">3,591</td>
+</tr>
+<tr class="even">
+<td align="left">zhwiki</td>
+<td align="left">Using per-field query builder with incoming links and pageviews as QIFs</td>
+<td align="right">3,807</td>
+</tr>
+<tr class="odd">
+<td align="left">All Wikis</td>
+<td align="left">Total</td>
+<td align="right">22,113</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="zero-results-rate" class="section level3">
 <h3>Zero Results Rate</h3>
@@ -795,6 +874,106 @@ first_clicked %&gt;%
         <span class="dt">strip.background =</span> <span class="kw">element_rect</span>(<span class="dt">fill =</span> <span class="st">&quot;gray90&quot;</span>),
         <span class="dt">panel.border =</span> <span class="kw">element_rect</span>(<span class="dt">color =</span> <span class="st">&quot;gray30&quot;</span>, <span class="dt">fill =</span> <span class="ot">NA</span>))</code></pre></div>
 <p><img src="index_files/figure-html/first_clicked_position_eda2-1.png" /><!-- --></p>
+</div>
+<div id="dwell-time-per-visit-page" class="section level3">
+<h3>Dwell Time per visit page</h3>
+<p>The figures below show the survival curve for each test group and wikis. Except zhwiki, users are more likely to stay longer on visit pages.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">clickedResults %&gt;%
+<span class="st">  </span><span class="kw">split</span>(.$<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">map_df</span>(function(df) {
+    seconds &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>)
+    seshs &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(<span class="kw">do.call</span>(cbind, <span class="kw">lapply</span>(seconds, function(second) {
+      <span class="kw">return</span>(<span class="kw">sum</span>(df$dwell_time &gt;=<span class="st"> </span>second))
+    })))
+    <span class="kw">names</span>(seshs) &lt;-<span class="st"> </span>seconds
+    <span class="kw">return</span>(<span class="kw">cbind</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span> =<span class="st"> </span><span class="kw">head</span>(df$<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dv">1</span>), <span class="dt">n =</span> seshs$<span class="st">`</span><span class="dt">0</span><span class="st">`</span>, seshs, <span class="st">`</span><span class="dt">450</span><span class="st">`</span>=seshs$<span class="st">`</span><span class="dt">420</span><span class="st">`</span>))
+  }) %&gt;%
+<span class="st">  </span><span class="kw">gather</span>(seconds, visits, -<span class="kw">c</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, n)) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">seconds =</span> <span class="kw">as.numeric</span>(seconds)) %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, seconds) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">proportion =</span> visits/n) %&gt;%
+<span class="st">  </span><span class="kw">ungroup</span>() %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">group=</span><span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">color=</span><span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_step</span>(<span class="kw">aes</span>(<span class="dt">x =</span> seconds, <span class="dt">y =</span> proportion), <span class="dt">direction =</span> <span class="st">&quot;hv&quot;</span>) +
+<span class="st">  </span><span class="kw">scale_x_continuous</span>(<span class="dt">name =</span> <span class="st">&quot;T (Dwell Time)&quot;</span>, <span class="dt">breaks=</span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>))+<span class="st"> </span>
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="st">&quot;Proportion of visits longer than T&quot;</span>, <span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(),
+                     <span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/dwell_time_eda-1.png" /><!-- --></p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">clickedResults %&gt;%
+<span class="st">  </span><span class="kw">split</span>(<span class="kw">list</span>(.$wiki, .$<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">map_df</span>(function(df) {
+    seconds &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>)
+    seshs &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(<span class="kw">do.call</span>(cbind, <span class="kw">lapply</span>(seconds, function(second) {
+      <span class="kw">return</span>(<span class="kw">sum</span>(df$dwell_time &gt;=<span class="st"> </span>second))
+    })))
+    <span class="kw">names</span>(seshs) &lt;-<span class="st"> </span>seconds
+    <span class="kw">return</span>(<span class="kw">cbind</span>(<span class="dt">wiki=</span><span class="kw">head</span>(df$wiki, <span class="dv">1</span>), <span class="st">`</span><span class="dt">test group</span><span class="st">`</span> =<span class="st"> </span><span class="kw">head</span>(df$<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dv">1</span>), <span class="dt">n =</span> seshs$<span class="st">`</span><span class="dt">0</span><span class="st">`</span>, seshs, <span class="st">`</span><span class="dt">450</span><span class="st">`</span>=seshs$<span class="st">`</span><span class="dt">420</span><span class="st">`</span>))
+  }) %&gt;%
+<span class="st">  </span><span class="kw">gather</span>(seconds, visits, -<span class="kw">c</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, n)) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">seconds =</span> <span class="kw">as.numeric</span>(seconds)) %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, seconds) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">proportion =</span> visits/n) %&gt;%
+<span class="st">  </span><span class="kw">ungroup</span>() %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">group=</span><span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">color=</span><span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_step</span>(<span class="kw">aes</span>(<span class="dt">x =</span> seconds, <span class="dt">y =</span> proportion), <span class="dt">direction =</span> <span class="st">&quot;hv&quot;</span>) +
+<span class="st">  </span><span class="kw">scale_x_continuous</span>(<span class="dt">name =</span> <span class="st">&quot;T (Dwell Time)&quot;</span>, <span class="dt">breaks=</span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>))+<span class="st"> </span>
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="st">&quot;Proportion of visits longer than T&quot;</span>, <span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(),
+                     <span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol=</span><span class="dv">1</span>, <span class="dt">nrow =</span><span class="dv">3</span>)</code></pre></div>
+<p><img src="index_files/figure-html/dwell_time_eda_wiki-1.png" /><!-- --></p>
+</div>
+<div id="proportion-of-visit-pages-with-scroll" class="section level3">
+<h3>Proportion of visit pages with scroll</h3>
+<p>Users in the test group are more likely to scroll on the visit page, but the differences are not statistically significant.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">scroll_overall &lt;-<span class="st"> </span>clickedResults %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="dt">scrolls=</span><span class="kw">sum</span>(scroll), <span class="dt">visits=</span><span class="kw">n</span>(), <span class="dt">proportion =</span> <span class="kw">sum</span>(scroll)/<span class="kw">n</span>()) %&gt;%
+<span class="st">  </span>ungroup
+scroll_overall &lt;-<span class="st"> </span><span class="kw">cbind</span>(
+  scroll_overall,
+  <span class="kw">as.data.frame</span>(
+    binom:::<span class="kw">binom.bayes</span>(
+      scroll_overall$scrolls,
+      <span class="dt">n =</span> scroll_overall$visits)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]
+  )
+)
+scroll_overall %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="dv">1</span>, <span class="dt">y =</span> mean, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(), <span class="dt">expand =</span> <span class="kw">c</span>(<span class="fl">0.01</span>, <span class="fl">0.01</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Proportion of visits&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Proportion of visits with scroll by test group&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion), <span class="dt">y =</span> upper +<span class="st"> </span><span class="fl">0.0025</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/scroll_eda-1.png" /><!-- --></p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">scroll_overall &lt;-<span class="st"> </span>clickedResults %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="dt">scrolls=</span><span class="kw">sum</span>(scroll), <span class="dt">visits=</span><span class="kw">n</span>(), <span class="dt">proportion =</span> <span class="kw">sum</span>(scroll)/<span class="kw">n</span>()) %&gt;%
+<span class="st">  </span>ungroup
+scroll_overall &lt;-<span class="st"> </span><span class="kw">cbind</span>(
+  scroll_overall,
+  <span class="kw">as.data.frame</span>(
+    binom:::<span class="kw">binom.bayes</span>(
+      scroll_overall$scrolls,
+      <span class="dt">n =</span> scroll_overall$visits)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]
+  )
+)
+scroll_overall %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="dv">1</span>, <span class="dt">y =</span> mean, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(), <span class="dt">expand =</span> <span class="kw">c</span>(<span class="fl">0.01</span>, <span class="fl">0.01</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Proportion of visits&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Proportion of visits with scroll by test group and wiki&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion), <span class="dt">y =</span> upper +<span class="st"> </span><span class="fl">0.0025</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/scroll_eda_wiki-1.png" /><!-- --></p>
 </div>
 </div>
 
