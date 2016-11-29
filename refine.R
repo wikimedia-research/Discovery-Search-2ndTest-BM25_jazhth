@@ -68,11 +68,12 @@ searches <- events %>%
             clickthrough = "click" %in% action,
             `no. results clicked` = length(unique(position_clicked))-1,
             `first clicked result's position` = ifelse(clickthrough, position_clicked[2], NA),
-            `result page IDs` = result_pids[1],
+            `result page IDs` = paste(unique(result_pids[!is.na(result_pids)]), collapse=','),
             `Query score (F=0.1)` = query_score(position_clicked, 0.1),
             `Query score (F=0.5)` = query_score(position_clicked, 0.5),
             `Query score (F=0.9)` = query_score(position_clicked, 0.9)) %>%
   arrange(ts)
+searches$`result page IDs`[searches$`result page IDs`==""] <- NA
 # 213437 events, 64535 searches
 
 # Summary Table

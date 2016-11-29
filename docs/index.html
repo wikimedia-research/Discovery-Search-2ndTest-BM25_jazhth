@@ -16,7 +16,7 @@
 <meta name="author" content="Deb Tankersley (Product Management)" />
 <meta name="author" content="Chelsy Xie (Analysis &amp; Report)" />
 
-<meta name="date" content="2016-11-22" />
+<meta name="date" content="2016-11-28" />
 
 <title>Second BM25 A/B test (ja, zh, th) Analysis</title>
 
@@ -278,13 +278,14 @@ div.tocify {
 
 
 <h1 class="title toc-ignore">Second BM25 A/B test (ja, zh, th) Analysis</h1>
+<h3 class="subtitle"><em>Draft</em></h3>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)</em></h4>
 <h4 class="author"><em><a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering &amp; Report)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:TJones_(WMF)'>Trey Jones</a> (Engineering &amp; Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:MPopov_(WMF)'>Mikhail Popov</a> (Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:DTankersley_(WMF)'>Deb Tankersley</a> (Product Management)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:CXie_(WMF)'>Chelsy Xie</a> (Analysis &amp; Report)</em></h4>
-<h4 class="date"><em>22 November 2016</em></h4>
+<h4 class="date"><em>28 November 2016</em></h4>
 
 </div>
 
@@ -458,11 +459,12 @@ searches &lt;-<span class="st"> </span>events %&gt;%
             <span class="dt">clickthrough =</span> <span class="st">&quot;click&quot;</span> %in%<span class="st"> </span>action,
             <span class="st">`</span><span class="dt">no. results clicked</span><span class="st">`</span> =<span class="st"> </span><span class="kw">length</span>(<span class="kw">unique</span>(position_clicked))-<span class="dv">1</span>,
             <span class="st">`</span><span class="dt">first clicked result&#39;s position</span><span class="st">`</span> =<span class="st"> </span><span class="kw">ifelse</span>(clickthrough, position_clicked[<span class="dv">2</span>], <span class="ot">NA</span>),
-            <span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span> =<span class="st"> </span>result_pids[<span class="dv">1</span>],
+            <span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span> =<span class="st"> </span><span class="kw">paste</span>(<span class="kw">unique</span>(result_pids[!<span class="kw">is.na</span>(result_pids)]), <span class="dt">collapse=</span><span class="st">&#39;,&#39;</span>),
             <span class="st">`</span><span class="dt">Query score (F=0.1)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.1</span>),
             <span class="st">`</span><span class="dt">Query score (F=0.5)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.5</span>),
             <span class="st">`</span><span class="dt">Query score (F=0.9)</span><span class="st">`</span> =<span class="st"> </span><span class="kw">query_score</span>(position_clicked, <span class="fl">0.9</span>)) %&gt;%
-<span class="st">  </span><span class="kw">arrange</span>(ts)</code></pre></div>
+<span class="st">  </span><span class="kw">arrange</span>(ts)
+searches$<span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span>[searches$<span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span>==<span class="st">&quot;&quot;</span>] &lt;-<span class="st"> </span><span class="ot">NA</span></code></pre></div>
 <p>After de-duplicating, we collapsed 213.4K (searchResultPage and click) events into 64.5K searches. See Table 2 for counts broken down by wiki and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">events_summary2 &lt;-<span class="st"> </span>events %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> </span>test_group) %&gt;%
@@ -974,6 +976,185 @@ scroll_overall %&gt;%
 <span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>) +
 <span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
 <p><img src="index_files/figure-html/scroll_eda_wiki-1.png" /><!-- --></p>
+</div>
+<div id="query-reformulation" class="section level3">
+<h3>Query Reformulation</h3>
+<p>First, we tokenized queries from zhwiki, jawiki and thwiki with <a href="https://github.com/fxsjy/jieba">jieba</a>, <a href="https://pypi.python.org/pypi/tinysegmenter">tinysegmenter</a> and <a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-termvectors.html">elasticsearch termvectors api</a> separately. Then we filter out <a href="https://github.com/6/stopwords-json">stop words</a>.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># See tokenize.R for more details</span>
+<span class="kw">library</span>(jiebaR)
+<span class="kw">library</span>(ropencc)
+
+<span class="co">#thwiki</span>
+<span class="kw">load</span>(<span class="st">&quot;../data/tokens_th.RData&quot;</span>)
+tokens_th &lt;-<span class="st"> </span>output; <span class="kw">rm</span>(output)
+stopword_th &lt;-<span class="st"> </span>jsonlite::<span class="kw">fromJSON</span>(<span class="st">&quot;../resource/th.json&quot;</span>)
+tokens_th &lt;-<span class="st"> </span><span class="kw">filter_segment</span>(tokens_th,stopword_th)
+
+<span class="co">#zhwiki</span>
+queries_zh &lt;-<span class="st"> </span>searches[searches$wiki==<span class="st">&quot;zhwiki&quot;</span>, <span class="kw">c</span>(<span class="st">&quot;page_id&quot;</span>,<span class="st">&quot;query&quot;</span>)]
+queries_zh$query &lt;-<span class="st"> </span><span class="kw">gsub</span>(<span class="st">&quot;[[:punct:]]&quot;</span>, <span class="st">&quot; &quot;</span>, queries_zh$query)
+stopword_zh &lt;-<span class="st"> </span>jsonlite::<span class="kw">fromJSON</span>(<span class="st">&quot;../resource/zh.json&quot;</span>)
+ccst =<span class="st"> </span><span class="kw">converter</span>(S2T)
+stopword_zh &lt;-<span class="st"> </span><span class="kw">union</span>(ccst[stopword_zh], stopword_zh)
+mixseg =<span class="st"> </span><span class="kw">worker</span>(<span class="dt">bylines =</span> <span class="ot">TRUE</span>)
+tokens_zh &lt;-<span class="st"> </span>mixseg[queries_zh$query]
+tokens_zh &lt;-<span class="st"> </span><span class="kw">filter_segment</span>(tokens_zh,stopword_zh)
+<span class="kw">names</span>(tokens_zh) &lt;-<span class="st"> </span>queries_zh$page_id
+
+<span class="co">#jawiki</span>
+tokens_ja &lt;-<span class="st"> </span>jsonlite::<span class="kw">fromJSON</span>(<span class="st">&quot;../data/tokens_ja.json&quot;</span>)
+stopword_ja &lt;-<span class="st"> </span>jsonlite::<span class="kw">fromJSON</span>(<span class="st">&quot;../resource/ja.json&quot;</span>)
+tokens_ja &lt;-<span class="st"> </span><span class="kw">filter_segment</span>(tokens_ja,stopword_ja)
+tokens_ja &lt;-<span class="st"> </span><span class="kw">lapply</span>(tokens_ja, function(x) <span class="kw">gsub</span>(<span class="st">&quot; +&quot;</span>,<span class="st">&quot;&quot;</span>,x)) <span class="co"># strip space before/after string</span></code></pre></div>
+<p>We consider two queries as a reformulation if 1) they are from the same search session and share at least one result, or 2) they are from the same search session and share at least one word.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(igraph)
+all_tokens &lt;-<span class="st"> </span><span class="kw">c</span>(tokens_ja, tokens_zh, tokens_th)
+
+overlapping_results &lt;-<span class="st"> </span>function(x) {
+  if (<span class="kw">all</span>(<span class="kw">is.na</span>(x))) {
+    <span class="kw">return</span>(<span class="kw">diag</span>(<span class="kw">length</span>(x)))
+  }
+  input &lt;-<span class="st"> </span><span class="kw">strsplit</span>(stringr::<span class="kw">str_replace_all</span>(x, <span class="st">&quot;[</span><span class="ch">\\</span><span class="st">[</span><span class="ch">\\</span><span class="st">]]&quot;</span>, <span class="st">&quot;&quot;</span>), <span class="st">&quot;,&quot;</span>)
+  output &lt;-<span class="st"> </span><span class="kw">vapply</span>(input, function(y) {
+    temp &lt;-<span class="st"> </span><span class="kw">vapply</span>(input, function(z) { <span class="kw">length</span>(<span class="kw">intersect</span>(z, y)) }, 0L)
+    temp[<span class="kw">is.na</span>(x)] &lt;-<span class="st"> </span>0L
+    <span class="kw">return</span>(temp)
+  }, <span class="kw">rep</span>(0L, <span class="kw">length</span>(input)))
+  <span class="kw">diag</span>(output) &lt;-<span class="st"> </span>1L
+  <span class="kw">return</span>(output)
+}
+
+reformulation &lt;-<span class="st"> </span>function(result_pids, page_ids, all_tokens) {
+  if(<span class="kw">length</span>(page_ids)==<span class="dv">1</span>){
+    <span class="kw">return</span>(<span class="kw">data.frame</span>(<span class="dt">n_search=</span><span class="dv">1</span>, <span class="dt">n_reformulate=</span><span class="st">&quot;0&quot;</span>))
+  }
+  <span class="co"># result overlap</span>
+  overlaps_res &lt;-<span class="st"> </span><span class="kw">overlapping_results</span>(result_pids)
+  <span class="co"># tokens overlap</span>
+  this_tokens &lt;-<span class="st"> </span>all_tokens[page_ids]
+  overlaps_token &lt;-<span class="st"> </span><span class="kw">vapply</span>(this_tokens, function(y) {
+    temp &lt;-<span class="st"> </span><span class="kw">vapply</span>(this_tokens, function(z) { <span class="kw">length</span>(<span class="kw">intersect</span>(z, y)) }, 0L)
+    temp[<span class="kw">is.na</span>(this_tokens)] &lt;-<span class="st"> </span>0L
+    <span class="kw">return</span>(temp)
+  }, <span class="kw">rep</span>(0L, <span class="kw">length</span>(this_tokens)))
+  <span class="kw">diag</span>(overlaps_token) &lt;-<span class="st"> </span>1L
+  
+  overlaps_all &lt;-<span class="st"> </span>(overlaps_res +<span class="st"> </span>overlaps_token) &gt;<span class="st"> </span><span class="dv">0</span>
+  <span class="kw">diag</span>(overlaps_all) &lt;-<span class="st"> </span>0L
+  graph_object &lt;-<span class="st"> </span><span class="kw">graph_from_adjacency_matrix</span>(overlaps_all, <span class="dt">mode =</span> <span class="kw">c</span>(<span class="st">&quot;undirected&quot;</span>), <span class="dt">diag =</span> F)
+  csize &lt;-<span class="st"> </span><span class="kw">clusters</span>(graph_object)$csize
+  <span class="kw">return</span>(<span class="kw">data.frame</span>(<span class="dt">n_search=</span><span class="kw">length</span>(csize), <span class="dt">n_reformulate=</span><span class="kw">ifelse</span>(<span class="kw">length</span>(csize)&gt;<span class="dv">1</span>,<span class="kw">paste</span>(csize<span class="dv">-1</span>, <span class="dt">collapse=</span><span class="st">&#39;,&#39;</span> ), <span class="kw">as.character</span>(csize<span class="dv">-1</span>))))
+}
+
+reform_times &lt;-<span class="st"> </span>searches %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, session_id, search_id) %&gt;%<span class="st"> </span>
+<span class="st">  </span><span class="kw">do</span>(<span class="kw">reformulation</span>(.$<span class="st">`</span><span class="dt">result page IDs</span><span class="st">`</span>, .$page_id, all_tokens))</code></pre></div>
+<p>We grouped searches together using the rules above, then we have 51354 total search groups.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">reform_times %&gt;%<span class="st"> </span>ungroup %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">n_search=</span><span class="kw">ifelse</span>(n_search&gt;=<span class="dv">10</span>,<span class="st">&quot;10+&quot;</span>,n_search)) %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(n_search) %&gt;%
+<span class="st">  </span><span class="kw">summarise</span>(<span class="dt">n_session=</span><span class="kw">n</span>()) %&gt;%
+<span class="st">  </span><span class="kw">mutate</span>(<span class="dt">prop=</span>n_session/<span class="kw">sum</span>(n_session)) %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> n_search, <span class="dt">y =</span> prop)) +
+<span class="st">  </span><span class="kw">geom_bar</span>(<span class="dt">stat =</span> <span class="st">&quot;identity&quot;</span>) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="st">&quot;Proportion of search sessions&quot;</span>, <span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
+<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="st">&quot;Number of Search Groups&quot;</span>, <span class="dt">limits =</span> <span class="kw">c</span>(<span class="dv">1</span>:<span class="dv">9</span>, <span class="st">&quot;10+&quot;</span>)) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span>*prop)), <span class="dt">nudge_y =</span> <span class="fl">0.025</span>) +
+<span class="st">  </span>ggthemes::<span class="kw">theme_tufte</span>(<span class="dt">base_family =</span> <span class="st">&quot;Gill Sans&quot;</span>, <span class="dt">base_size =</span> <span class="dv">14</span>) +
+<span class="st">  </span><span class="kw">ggtitle</span>(<span class="st">&quot;Proportion of search sessions making N search groups&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/reform_n_search_group-1.png" /><!-- --></p>
+<p>We can see that test group users are less likely to reformulate their queries.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">reformulation_counts &lt;-<span class="st"> </span>reform_times %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(<span class="kw">as.numeric</span>(<span class="kw">unlist</span>(<span class="kw">lapply</span>(n_reformulate, function(x) <span class="kw">strsplit</span>(x, <span class="st">&quot;,&quot;</span>)))) &gt;<span class="st"> </span><span class="dv">0</span>),
+            <span class="dt">searches =</span> <span class="kw">sum</span>(n_search),
+            <span class="dt">proportion =</span> <span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span>/searches) %&gt;%
+<span class="st">  </span>ungroup
+reformulation_counts &lt;-<span class="st"> </span><span class="kw">cbind</span>(
+  reformulation_counts,
+  <span class="kw">as.data.frame</span>(
+    binom:::<span class="kw">binom.bayes</span>(
+      reformulation_counts$<span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span>,
+      <span class="dt">n =</span> reformulation_counts$searches,
+      <span class="dt">tol =</span> .Machine$double.eps^<span class="fl">0.1</span>)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]
+  )
+)
+reformulation_counts %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">y =</span> <span class="st">`</span><span class="dt">mean</span><span class="st">`</span>, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper)) +
+<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">rev</span>(<span class="kw">levels</span>(events$test_group))) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="ot">FALSE</span>) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;% of searches with query reformulations&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Searches with reformulated queries by test group&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;Queries were grouped when they shared common results or common key words&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.2f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion),
+                <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>, <span class="dt">hjust =</span> <span class="st">&quot;center&quot;</span>), <span class="dt">nudge_x =</span> <span class="fl">0.1</span>)</code></pre></div>
+<p><img src="index_files/figure-html/reform_eda1-1.png" /><!-- --></p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">reformulation_counts &lt;-<span class="st"> </span>reform_times %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">summarize</span>(<span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span> =<span class="st"> </span><span class="kw">sum</span>(<span class="kw">as.numeric</span>(<span class="kw">unlist</span>(<span class="kw">lapply</span>(n_reformulate, function(x) <span class="kw">strsplit</span>(x, <span class="st">&quot;,&quot;</span>)))) &gt;<span class="st"> </span><span class="dv">0</span>),
+            <span class="dt">searches =</span> <span class="kw">sum</span>(n_search),
+            <span class="dt">proportion =</span> <span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span>/searches) %&gt;%
+<span class="st">  </span>ungroup
+reformulation_counts &lt;-<span class="st"> </span><span class="kw">cbind</span>(
+  reformulation_counts,
+  <span class="kw">as.data.frame</span>(
+    binom:::<span class="kw">binom.bayes</span>(
+      reformulation_counts$<span class="st">`</span><span class="dt">searches with query reformulations</span><span class="st">`</span>,
+      <span class="dt">n =</span> reformulation_counts$searches)[, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;lower&quot;</span>, <span class="st">&quot;upper&quot;</span>)]
+  )
+)
+reformulation_counts %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="dv">1</span>, <span class="dt">y =</span> <span class="st">`</span><span class="dt">mean</span><span class="st">`</span>, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper), <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(), <span class="dt">expand =</span> <span class="kw">c</span>(<span class="fl">0.01</span>, <span class="fl">0.01</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;% of searches with query reformulations&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Searches with reformulated queries by test group and wiki&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;Queries were grouped when they shared common results or common key words&quot;</span>) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion), <span class="dt">y =</span> upper +<span class="st"> </span><span class="fl">0.0025</span>, <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)+
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>)</code></pre></div>
+<p><img src="index_files/figure-html/reform_eda1_wiki-1.png" /><!-- --></p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">count_reformulation &lt;-<span class="st"> </span>function(n_reformulate){
+  temp &lt;-<span class="st"> </span><span class="kw">as.numeric</span>(<span class="kw">unlist</span>(<span class="kw">lapply</span>(n_reformulate, function(x) <span class="kw">strsplit</span>(x, <span class="st">&quot;,&quot;</span>))))
+  temp &lt;-<span class="st"> </span><span class="kw">ifelse</span>(temp&gt;=<span class="dv">3</span>, <span class="st">&quot;3+&quot;</span>, temp)
+  output &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(<span class="kw">table</span>(temp))
+  output$proportion &lt;-<span class="st"> </span>output$Freq/<span class="kw">sum</span>(output$Freq)
+  <span class="kw">colnames</span>(output)[<span class="dv">1</span>] &lt;-<span class="st"> &quot;query reformulations&quot;</span>
+  <span class="kw">return</span>(output)
+}
+reform_times %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">do</span>(<span class="kw">count_reformulation</span>(.$n_reformulate)) %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">query reformulations</span><span class="st">`</span>, <span class="dt">y =</span> proportion, <span class="dt">fill =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_bar</span>(<span class="dt">stat =</span> <span class="st">&quot;identity&quot;</span>, <span class="dt">position =</span> <span class="st">&quot;dodge&quot;</span>) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
+<span class="st">  </span><span class="kw">scale_fill_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion), <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">y =</span> <span class="st">&quot;Proportion of searches&quot;</span>, <span class="dt">x =</span> <span class="st">&quot;Approximate number of query reformulations per grouped search&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Number of query reformulations by test group&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;Queries were grouped when they shared common results or common key words&quot;</span>) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
+<p><img src="index_files/figure-html/reform_eda2-1.png" /><!-- --></p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">reform_times %&gt;%
+<span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>) %&gt;%
+<span class="st">  </span><span class="kw">do</span>(<span class="kw">count_reformulation</span>(.$n_reformulate)) %&gt;%
+<span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">query reformulations</span><span class="st">`</span>, <span class="dt">y =</span> proportion, <span class="dt">fill =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
+<span class="st">  </span><span class="kw">geom_bar</span>(<span class="dt">stat =</span> <span class="st">&quot;identity&quot;</span>, <span class="dt">position =</span> <span class="st">&quot;dodge&quot;</span>) +
+<span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
+<span class="st">  </span><span class="kw">scale_fill_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="kw">guide_legend</span>(<span class="dt">ncol =</span> <span class="dv">2</span>)) +
+<span class="st">  </span><span class="kw">geom_text</span>(<span class="kw">aes</span>(<span class="dt">label =</span> <span class="kw">sprintf</span>(<span class="st">&quot;%.1f%%&quot;</span>, <span class="dv">100</span> *<span class="st"> </span>proportion), <span class="dt">vjust =</span> <span class="st">&quot;bottom&quot;</span>),
+            <span class="dt">position =</span> <span class="kw">position_dodge</span>(<span class="dt">width =</span> <span class="dv">1</span>)) +
+<span class="st">  </span><span class="kw">labs</span>(<span class="dt">y =</span> <span class="st">&quot;Proportion of searches&quot;</span>, <span class="dt">x =</span> <span class="st">&quot;Approximate number of query reformulations per grouped search&quot;</span>,
+       <span class="dt">title =</span> <span class="st">&quot;Number of query reformulations by test group and wiki&quot;</span>,
+       <span class="dt">subtitle =</span> <span class="st">&quot;Queries were grouped when they shared common results or common key words&quot;</span>) +
+<span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)+
+<span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol =</span> <span class="dv">3</span>)</code></pre></div>
+<p><img src="index_files/figure-html/reform_eda2_wiki-1.png" /><!-- --></p>
 </div>
 </div>
 

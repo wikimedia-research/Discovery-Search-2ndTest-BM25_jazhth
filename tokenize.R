@@ -49,9 +49,43 @@ names(tokens_zh) <- queries_zh$page_id
 
 #jawiki
 queries_ja <- searches[searches$wiki=="jawiki", c("page_id","query")]
+# use python tokenizer
 write_feather(queries_ja, "data/queries_ja.feather")
 tokens_ja <- jsonlite::fromJSON("data/tokens_ja.json")
 stopword_ja <- jsonlite::fromJSON("resource/ja.json")
 tokens_ja <- filter_segment(tokens_ja,stopword_ja)
 tokens_ja <- lapply(tokens_ja, function(x) gsub(" +","",x)) # strip space before/after string
-
+#####################################
+if(FALSE) {# OR: use elastic tokenizer
+save(queries_ja, file="data/queries_ja.RData")
+system("scp data/queries_ja.RData chelsyx@stat2:~/")
+# run on stat2
+load("queries_ja.RData")
+output <- lapply(queries_ja$query, function(query){
+  query <- gsub("[[:punct:]]", " ", query)
+  curl_string <- paste0("curl -XPOST http://elastic2020.codfw.wmnet:9200/jawiki_content/page/_mtermvectors -d '{
+                        \"docs\": [{
+                        \"doc\": { \"title\": \"",query,
+                        "\" },
+                        \"fields\": [\"title\", \"title.plain\"],
+                        \"positions\": true,
+                        \"offsets\": false,
+                        \"term_statistics\": false,
+                        \"field_statistics\": false
+}]
+}'")
+  results <- system(curl_string, intern = TRUE)
+  results <- jsonlite::fromJSON(results,simplifyVector=F)
+  tokens <- names(results$docs[[1]]$term_vectors$title$terms)
+  return(tokens)
+})
+names(output) <- queries_ja$page_id
+save(output, file="tokens_ja.RData")
+#local
+system("scp chelsyx@stat2:~/tokens_ja.RData data/")
+#filter stop words
+load("data/tokens_ja.RData")
+tokens_ja <- output; rm(output)
+stopword_ja <- jsonlite::fromJSON("resource/ja.json")
+tokens_ja <- filter_segment(tokens_ja,stopword_ja)
+}
