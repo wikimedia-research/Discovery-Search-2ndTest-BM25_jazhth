@@ -31,18 +31,17 @@ zrr_pages <- searches %>%
   ungroup
 zrr_pages <- cbind(zrr_pages, as.data.frame(binom:::binom.bayes(zrr_pages$zero, n = zrr_pages$some + zrr_pages$zero)[, c("mean", "lower", "upper")]))
 zrr_pages %>%
-  ggplot(aes(x = `test group`, y = `mean`, color = `test group`)) +
-  geom_pointrange(aes(ymin = lower, ymax = upper)) +
-  scale_x_discrete(limits = rev(levels(events$test_group))) +
-  scale_y_continuous(labels = scales::percent_format()) +
-  scale_color_brewer("Test Group", palette = "Set1", guide = FALSE) +
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
   labs(x = NULL, y = "Zero Results Rate",
        title = "Proportion of searches that did not yield any results, by test group and wiki",
        subtitle = "With 95% credible intervals.") +
   geom_text(aes(label = sprintf("%.2f%%", 100 * `zero results rate`),
-                vjust = "bottom", hjust = "center"), nudge_x = 0.1) +
-  facet_wrap(~ wiki, ncol = 3) #+
-#theme_minimal(base_family = "Lato")
+                y = upper + 0.0025, vjust = "bottom"), position = position_dodge(width = 1)) +
+  facet_wrap(~ wiki, ncol = 3) +
+  theme(legend.position = "bottom")
 
 # PaulScore
 set.seed(777)
@@ -224,6 +223,33 @@ searches %>%
   summarise(`no. results clicked`=mean(`no. results clicked`))
 
 # dwell time
+if(FALSE){
+  checkins <- c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420)
+  page_visits <- plyr::ddply(events, c("wiki", "test_group", "session_id", "page_id"),
+                             function(session) {
+                               if (!all(c('visitPage', 'checkin') %in% session$action)) {
+                                 return(NULL)
+                               }
+                               temp <- session[all(c('visitPage', 'checkin') %in% session$action), ]
+                               last_checkin <- max(temp$checkin, na.rm = TRUE)
+                               idx <- which(checkins > last_checkin)
+                               if (length(idx) == 0) idx <- 16 # length(checkins) = 16
+                               next_checkin <- checkins[min(idx)]
+                               status <- ifelse(last_checkin == 420, 0, 3)
+                               return(c(`last check-in` = last_checkin,
+                                        `next check-in` = next_checkin,
+                                        status = status))
+                             })
+  fit <- survival::survfit(survival::Surv(time = `last check-in`,
+                                          time2 = `next check-in`,
+                                          event = status,
+                                          type = "interval") ~ test_group,
+                           data=page_visits)
+  autoplot(fit)
+  
+}
+
+
 clickedResults %>%
   split(.$`test group`) %>% 
   map_df(function(df) {

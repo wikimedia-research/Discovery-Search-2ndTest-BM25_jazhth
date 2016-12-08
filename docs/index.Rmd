@@ -1,6 +1,6 @@
 ---
-title: "Second BM25 A/B test (ja, zh, th) Analysis"
-subtitle: "Draft"
+title: "Second BM25 A/B Test Analysis"
+subtitle: "First Draft"
 author:
 - <a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)
 - <a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering & Report)
@@ -50,8 +50,6 @@ path <- function(x) {
     return(x)
   }
 }
-# Font to go together with HTML version of report: http://www.latofonts.com/
-# extrafont::font_import("~/Downloads/Lato2OFL")
 ```
 ```{r captions, echo = FALSE}
 # Manual figure & table captioning:
@@ -73,18 +71,44 @@ print_caption <- function(formatted_caption) {
   cat(paste0('<p class = "caption">', formatted_caption, '</p>', collapse = ''))
 }
 # Add captions:
-#code_caps(name = "bm25_query", caption = "Query used to extract BM25 test data from our event logging database.", display = FALSE)
-#table_caps(name = "clustering_example", caption = "Example of how choice of linkage affects clustering of queries from a real search session.", display = FALSE)
 table_caps(name = "group_counts", caption = "Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
 table_caps(name = "group_counts2", caption = "After searchResultPage De-duplication, Counts of sessions anonymously tracked and events collected during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
-#figure_caps("query_reform_counts", "Proportions of searches with 0, 1, 2, and 3+ query reformulations.", display = FALSE)
-#figure_caps("query_reform_prop", "Proportions of searches where user reformulated their query.", display = FALSE)
-figure_caps("zrr", "Zero results rate is the proportion of searches in which the user received zero results.", display = FALSE)
+table_caps(name = "group_counts3", caption = "Counts of visited pages from search sessions anonymously tracked during the second A/B test (Oct 27 - Nov 15).", display = FALSE)
+figure_caps("zrr", "Zero results rate is the proportion of searches in which the user received zero results. Broken down by test group.", display = FALSE)
+figure_caps("zrr2", "Zero results rate is the proportion of searches in which the user received zero results. Broken down by test group and wiki.", display = FALSE)
 figure_caps("paulscore", "Average per-group PaulScore for various values of F (0.1, 0.5, and 0.9) with bootstrapped confidence intervals.", display = FALSE)
+figure_caps("paulscore2", "Average per-group PaulScore for various values of F (0.1, 0.5, and 0.9) with bootstrapped confidence intervals. Broken down by test group and wiki.", display = FALSE)
 figure_caps("engagement_overall", "Clickthrough rates of test groups.", display = FALSE)
-#figure_caps("engagement", "Clickthrough rates of test groups after splitting searches into those having query reformulations and those without query reformulations.", display = FALSE)
-figure_caps("first_clicked", "First clicked result's position by group.", display = FALSE)
+figure_caps("engagement_overall2", "Clickthrough rates broken down by test group and wiki.", display = FALSE)
+figure_caps("first_clicked", "First clicked result's position by test group.", display = FALSE)
+figure_caps("first_clicked2", "First clicked result's position by test group and wiki.", display = FALSE)
+figure_caps("dwell_time", "At time T, at most P% of users still stay on their visited pages. Broken down by test group.", display = FALSE)
+figure_caps("dwell_time2", "At time T, at most P% of users still stay on their visited pages. Broken down by test group and wiki.", display = FALSE)
+figure_caps("scroll", "Proportion of visited pages with scroll by test group.", display = FALSE)
+figure_caps("scroll2", "Proportion of visited pages with scroll by test group and wiki.", display = FALSE)
+figure_caps("reform_n", "Proportion of search sessions making N search groups. A search group is a group of searches from the same search session, in which one search is connected with at least another one if they share at least one common word or at least one common result.", display = FALSE)
+figure_caps("query_reform_prop", "Proportions of searches where user reformulated their query.", display = FALSE)
+figure_caps("query_reform_prop2", "Proportions of searches where user reformulated their query. Broken down by wiki.", display = FALSE)
+figure_caps("query_reform_counts", "Proportions of searches with 0, 1, 2, and 3+ query reformulations.", display = FALSE)
+figure_caps("query_reform_counts2", "Proportions of searches with 0, 1, 2, and 3+ query reformulations. Broken down by wiki.", display = FALSE)
 ```
+
+## Executive Summary
+
+In order to assess the efficacy of BM25 in space-less language, Discovery’s Search team has decided to conduct a second A/B test in Chinese, Japanese and Thai Wikipedia. We found that for test group that used per-field query builder with incoming links and pageviews as query-independent factors, we have a much better Zero Result Rate but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing test group users worse results. However, longer dwell time and fewer query reformulation show that test group users may like the results they are getting on some dimension. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.
+
+## Background
+
+To improve the relevancy of search results, Discovery’s Search team decided to try a new document-ranking function called [Okapi BM25](https://en.wikipedia.org/wiki/Okapi_BM25) (BM stands for Best Matching), and ran an [A/B test](https://phabricator.wikimedia.org/T143585) from August 30 to September 10 to assess the efficacy of the proposed switch. The [analysis](https://wikimedia-research.github.io/Discovery-Search-Test-BM25) showed that BM25 ranking with incoming links and pageviews as query-independent factors appears to give users results that are more relevant and that they engage with more. 
+
+However, we then [realized](https://phabricator.wikimedia.org/T147008#2679631) that our analysis chain is sub-optimal for space-less language queries, which will break words on every characters for the plain field. Therefore, we ran a [second A/B test](https://phabricator.wikimedia.org/T147495) for Chinese, Japanese and Thai Wikipedia to test that the new per-field BM25 builder is or is not sufficiently worse on these languages. We are primarily interested in:
+
+* __Zero results rate__, the proportion of searches that yielded zero results (smaller is better)
+* __Users' engagement__ with the search results, measured as the clickthrough rate (bigger is better)
+* __PaulScore__, a metric of search results' relevancy that relies on the position of the clicked result[s] (bigger is better); see [PaulScore Definition](https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#paulscore_definition) for more details
+* __Query reformulation__ -- one way to think about the strength of our search engine is how many times the user reformulates their query; if a user in the test group has to reformulate their query many more times to get the results they are interested in, then maybe the change is for the worse
+* __Dwell Time__, the time (seconds) that users stayed on the pages they visited by clicking on the search results (bigger is better)
+* __Scroll__ -- if users scroll on the visited page, they are more likely to engage with the contents
 
 ```{r install_packages, eval = FALSE}
 # Install packages used in the report:
@@ -121,9 +145,7 @@ bootstrap_mean <- function(x, m, seed = NULL) {
 }
 ```
 
-## Results
-
-### Data
+## Data
 
 ```{r data, cache = TRUE}
 # Import events fetched from MySQL
@@ -142,7 +164,10 @@ cirrus <- cirrus[!duplicated(cirrus),]
 events <- left_join(events, cirrus, by = c("event_id", "page_id", "cirrus_id"))
 rm(cirrus)
 ```
-The test was deployed on October 27th and ran for a week (thwiki ran longer, till Nov 15.), collecting a total of `r polloi::compress(nrow(events), 1)` events from `r polloi::compress(length(unique(events$search_id)), 1)` unique sessions. See `r table_caps("group_counts", display = "cite")` for counts broken down by wiki and test group.
+
+For Chinese Wikipedia (zhwiki) and Japanese Wikipedia (jawiki), users had a 1 in 16 chance of being selected for search satisfaction tracking according to our [TestSearchSatisfaction2 #15922352](https://meta.wikimedia.org/w/index.php?title=Schema:TestSearchSatisfaction2&id=15922352) schema. Those users who were randomly selected to have their sessions anonymously tracked then had a 12 in 13 chance of being selected for the BM25 test. For Thai Wikipedia (thwiki), users had a 1 in 5 chance of being selected for search satisfaction tracking and then had a 38 in 39 chance of being selected for the BM25 test. The sampled sessions were evenly put into control group (tf-idf) and test group (Using per-field query builder with incoming links and pageviews as QIFs); see the [first BM25 test report](https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#data) for more details. The test was deployed on October 27th and ran for a week for zhwiki and jawiki; for thwiki, we ran the test from October 27 to November 15. 
+
+The full-text (as opposed to auto-complete) searching event logging data was extracted from the database using this [script](https://github.com/wikimedia-research/Discovery-Search-2ndTest-BM25_jazhth/blob/master/data.R). We collected a total of `r polloi::compress(nrow(events), 1)` events from `r polloi::compress(length(unique(events$search_id)), 1)` unique sessions. See `r table_caps("group_counts", display = "cite")` for counts broken down by wiki and test group.
 
 ```{r summary, results = "asis", dependson = "data"}
 events_summary <- events %>%
@@ -241,7 +266,7 @@ knitr::kable(inner_join(searches_summary, events_summary2, by=c("wiki", "Test gr
 print_caption(format_caption(table_caps, "group_counts2"))
 ```
 
-There are `r polloi::compress(length(unique(events$page_id[events$action=="visitPage"])), 1)` visitPage events. See the table below for counts broken down by wiki and test group.
+There are `r polloi::compress(length(unique(events$page_id[events$action=="visitPage"])), 1)` visitPage events (When the user clicks a link in the results a visitPage event is created). See `r table_caps("group_counts3", display = "cite")` for counts broken down by wiki and test group.
 
 ```{r aggregation_visits, dependson = "searchResultPage_deduplication", cache = TRUE}
 # Summarize on a page-by-page basis for each visitPage:
@@ -268,10 +293,15 @@ clickedResults_summary <- clickedResults %>%
   mutate(`Visited pages` = prettyNum(`Visited pages`, big.mark = ","))
 knitr::kable(clickedResults_summary, format = "markdown", align = c("l", "l", "r", "r"))
 ```
+```{r summary_caption3, results = "asis", echo = FALSE}
+print_caption(format_caption(table_caps, "group_counts3"))
+```
+
+## Results
 
 ### Zero Results Rate
 
-In `r figure_caps("zrr", display = "cite")`, we see that the test group had a significantly lower ZRR.
+In `r figure_caps("zrr", display = "cite")`, we see that the test group that used BM25 with incoming links and pageviews as query-independent factors had a significantly lower ZRR, but perhaps at the cost of relevance and engagement with the results. `r figure_caps("zrr2", display = "cite")` shows that zhwiki had the largest ZRR difference between control and test group.
 
 ```{r zrr, dependson = "query_clustering", cache = TRUE}
 zrr_pages <- searches %>%
@@ -296,10 +326,12 @@ zrr_pages %>%
        title = "Proportion of searches that did not yield any results, by test group",
        subtitle = "With 95% credible intervals.") +
   geom_text(aes(label = sprintf("%.2f%%", 100 * `zero results rate`),
-                vjust = "bottom", hjust = "center"), nudge_x = 0.1) #+
-  #theme_minimal(base_family = "Lato")
+                vjust = "bottom", hjust = "center"), nudge_x = 0.1) 
 ```
-```{r zrr_eda2}
+```{r zrr_caption2, echo = FALSE}
+zrr_cap2 <- format_caption(figure_caps, "zrr2")
+```
+```{r zrr_eda2, fig.cap = zrr_cap2, dependson = "zrr"}
 zrr_pages <- searches %>%
   group_by(wiki, `test group`, results) %>%
   tally %>%
@@ -308,22 +340,22 @@ zrr_pages <- searches %>%
   ungroup
 zrr_pages <- cbind(zrr_pages, as.data.frame(binom:::binom.bayes(zrr_pages$zero, n = zrr_pages$some + zrr_pages$zero)[, c("mean", "lower", "upper")]))
 zrr_pages %>%
-  ggplot(aes(x = `test group`, y = `mean`, color = `test group`)) +
-  geom_pointrange(aes(ymin = lower, ymax = upper)) +
-  scale_x_discrete(limits = rev(levels(events$test_group))) +
-  scale_y_continuous(labels = scales::percent_format()) +
-  scale_color_brewer("Test Group", palette = "Set1", guide = FALSE) +
+  ggplot(aes(x = 1, y = mean, color = `test group`)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 1)) +
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0.01, 0.01)) +
+  scale_color_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
   labs(x = NULL, y = "Zero Results Rate",
        title = "Proportion of searches that did not yield any results, by test group and wiki",
        subtitle = "With 95% credible intervals.") +
   geom_text(aes(label = sprintf("%.2f%%", 100 * `zero results rate`),
-                vjust = "bottom", hjust = "center"), nudge_x = 0.1) +
-  facet_wrap(~ wiki, ncol = 3) 
+                y = upper + 0.0025, vjust = "bottom"), position = position_dodge(width = 1)) +
+  facet_wrap(~ wiki, ncol = 3) +
+  theme(legend.position = "bottom")
 ```
 
 ### PaulScore
 
-In `r figure_caps("paulscore", display = "cite")`, we see that the test group had slightly lower PaulScores.
+In `r figure_caps("paulscore", display = "cite")`, we see that the test group had slightly lower PaulScores, which indicates that the results were less relevant. The difference is not significant when F = 0.9. `r figure_caps("paulscore2", display = "cite")` shows that zhwiki had the largest PaulScore differences between control and test group.
 
 ```{r paulscores, dependson = "query_clustering", cache = TRUE}
 set.seed(777)
@@ -355,10 +387,12 @@ paulscores %>%
        subtitle = "With bootstrapped 95% confidence intervals.") +
   geom_text(aes(label = sprintf("%.3f", PaulScore), y = Upper + 0.01, vjust = "bottom"),
             position = position_dodge(width = 0.7)) +
-  #theme_minimal(base_family = "Lato") +
   theme(legend.position = "bottom") 
 ```
-```{r paulscores_eda2}
+```{r paulscores_caption2, echo = FALSE}
+paulscore_cap2 <- format_caption(figure_caps, "paulscore2")
+```
+```{r paulscores_eda2, fig.cap = paulscore_cap2, dependson = "paulscores"}
 set.seed(777)
 paulscores <- searches %>%
   ungroup %>%
@@ -388,7 +422,7 @@ paulscores %>%
 
 ### Engagement
 
-In Figures `r figure_caps("engagement_overall", display = "num")`, we see that the test group had a significantly lower Clickthrough rate.
+In `r figure_caps("engagement_overall", display = "cite")`, we see that the test group had a significantly lower clickthrough rate, which means users are less engaged with their search results. Again, zhwiki shows the largest discrepancy between control and test group in `r figure_caps("engagement_overall2", display = "cite")`.
 
 ```{r engagement_overall, dependson = "query_reformulations", cache = TRUE}
 engagement_overall <- searches %>%
@@ -419,10 +453,12 @@ engagement_overall %>%
        title = "Engagement with search results by test group") +
   geom_text(aes(label = sprintf("%.1f%%", 100 * ctr), y = upper + 0.0025, vjust = "bottom"),
             position = position_dodge(width = 1)) +
-  #theme_minimal(base_family = "Lato") +
   theme(legend.position = "bottom")
 ```
-```{r engagement_overall_eda2}
+```{r engagement_overall_caption2, echo = FALSE}
+engagement_overall_cap2 <- format_caption(figure_caps, "engagement_overall2")
+```
+```{r engagement_overall_eda2, fig.cap = engagement_overall_cap2, dependson = "engagement_overall"}
 engagement_overall <- searches %>%
   filter(results=="some") %>% 
   group_by(wiki, `test group`) %>%
@@ -452,7 +488,7 @@ engagement_overall %>%
 
 ### First Clicked Result's Position
 
-In `r figure_caps("first_clicked", display = "cite")`, we see that test group users were less likely to click on the first search result first than the control group.
+In `r figure_caps("first_clicked", display = "cite")`, we see that test group users were less likely to click on the first search result first than the control group. `r figure_caps("first_clicked2", display = "cite")` shows that only zhwiki users first clicked on the first result at a significantly lower rate, which indicates that the results were less relevant.
 
 ```{r first_clicked_position, dependson = "query_reformulations", cache = TRUE}
 safe_ordinals <- function(x) {
@@ -485,7 +521,6 @@ first_clicked %>%
   labs(x = NULL, y = "Proportion of searches",
        title = "Position of the first clicked result",
        subtitle = "With 95% credible intervals") +
-  #theme_minimal(base_family = "Lato") +
   theme(legend.position = "bottom",
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
@@ -494,7 +529,10 @@ first_clicked %>%
         strip.background = element_rect(fill = "gray90"),
         panel.border = element_rect(color = "gray30", fill = NA))
 ```
-```{r first_clicked_position_eda2, fig.height=10 }
+```{r first_clicked_position_caption2, echo = FALSE}
+first_clicked_cap2 <- format_caption(figure_caps, "first_clicked2")
+```
+```{r first_clicked_position_eda2, fig.cap = first_clicked_cap2, dependson = "first_clicked_position", fig.height=10}
 first_clicked <- searches %>%
   filter(results == "some" & clickthrough & !is.na(`first clicked result's position`)) %>%
   mutate(`first clicked result's position` = ifelse(`first clicked result's position` < 4, safe_ordinals(`first clicked result's position` + 1), "5th or higher")) %>%
@@ -517,7 +555,6 @@ first_clicked %>%
   labs(x = NULL, y = "Proportion of searches",
        title = "Position of the first clicked result",
        subtitle = "With 95% credible intervals") +
-  #theme_minimal(base_family = "Lato") +
   theme(legend.position = "bottom",
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
@@ -527,11 +564,14 @@ first_clicked %>%
         panel.border = element_rect(color = "gray30", fill = NA))
 ```
 
-### Dwell Time per visit page
+### Dwell Time per Visited Page
 
-The figures below show the survival curve for each test group and wikis. Except zhwiki, users are more likely to stay longer on visit pages.
+Figures `r figure_caps("dwell_time", display = "num")` and `r figure_caps("dwell_time2", display = "num")` show the survival curve for each test group and wiki. Except zhwiki, users are more likely to stay longer on visited pages, which implies the results in test group are more relevant for jawiki and thwiki.
 
-```{r dwell_time_eda}
+```{r dwell_time_caption, echo = FALSE}
+dwell_time_cap <- format_caption(figure_caps, "dwell_time")
+```
+```{r dwell_time_eda, fig.cap = dwell_time_cap, dependson = "aggregation_visits"}
 clickedResults %>%
   split(.$`test group`) %>% 
   map_df(function(df) {
@@ -549,13 +589,15 @@ clickedResults %>%
   ungroup() %>%
   ggplot(aes(group=`test group`, color=`test group`)) +
   geom_step(aes(x = seconds, y = proportion), direction = "hv") +
-  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
-  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+  scale_x_continuous(name = "T (Dwell Time in seconds)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T (P%)", labels = scales::percent_format(),
                      breaks = seq(0, 1, 0.1)) +
   theme(legend.position = "bottom")
 ```
-
-```{r dwell_time_eda_wiki}
+```{r dwell_time_caption2, echo = FALSE}
+dwell_time_cap2 <- format_caption(figure_caps, "dwell_time2")
+```
+```{r dwell_time_eda_wiki, fig.cap = dwell_time_cap2, dependson = "aggregation_visits", fig.height=10}
 clickedResults %>%
   split(list(.$wiki, .$`test group`)) %>% 
   map_df(function(df) {
@@ -573,18 +615,21 @@ clickedResults %>%
   ungroup() %>%
   ggplot(aes(group=`test group`, color=`test group`)) +
   geom_step(aes(x = seconds, y = proportion), direction = "hv") +
-  scale_x_continuous(name = "T (Dwell Time)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
-  scale_y_continuous("Proportion of visits longer than T", labels = scales::percent_format(),
+  scale_x_continuous(name = "T (Dwell Time in seconds)", breaks=c(0, 10, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 300, 360, 420))+ 
+  scale_y_continuous("Proportion of visits longer than T (P%)", labels = scales::percent_format(),
                      breaks = seq(0, 1, 0.1)) +
   theme(legend.position = "bottom") +
   facet_wrap(~ wiki, ncol=1, nrow =3)
 ```
 
-### Proportion of visit pages with scroll
+### Scroll
 
-Users in the test group are more likely to scroll on the visit page, but the differences are not statistically significant.
+In Figures `r figure_caps("scroll", display = "num")` and `r figure_caps("scroll2", display = "num")`, we can see that users in the test group are more likely to scroll on the visited pages, but the differences are not statistically significant.
 
-```{r scroll_eda}
+```{r scroll_caption, echo = FALSE}
+scroll_cap <- format_caption(figure_caps, "scroll")
+```
+```{r scroll_eda, fig.cap = scroll_cap, dependson = "aggregation_visits"}
 scroll_overall <- clickedResults %>%
   group_by(`test group`) %>%
   summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
@@ -608,8 +653,10 @@ scroll_overall %>%
             position = position_dodge(width = 1)) +
   theme(legend.position = "bottom")
 ```
-
-```{r scroll_eda_wiki}
+```{r scroll_caption2, echo = FALSE}
+scroll_cap2 <- format_caption(figure_caps, "scroll2")
+```
+```{r scroll_eda_wiki, fig.cap = scroll_cap2, dependson = "aggregation_visits"}
 scroll_overall <- clickedResults %>%
   group_by(wiki, `test group`) %>%
   summarize(scrolls=sum(scroll), visits=n(), proportion = sum(scroll)/n()) %>%
@@ -639,7 +686,7 @@ scroll_overall %>%
 
 First, we tokenized queries from zhwiki, jawiki and thwiki with [jieba](https://github.com/fxsjy/jieba), [tinysegmenter](https://pypi.python.org/pypi/tinysegmenter) and [elasticsearch termvectors api](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-termvectors.html) separately. Then we filter out [stop words](https://github.com/6/stopwords-json).
 
-```{r tokenization}
+```{r tokenization, cache = TRUE}
 # See tokenize.R for more details
 library(jiebaR)
 library(ropencc)
@@ -715,9 +762,12 @@ reform_times <- searches %>%
   do(reformulation(.$`result page IDs`, .$page_id, all_tokens))
 ```
 
-We grouped searches together using the rules above, then we have 51354 total search groups.
+We grouped connected searches together using the rules above, then we have 51354 total search groups.
 
-```{r reform_n_search_group}
+```{r reform_n_search_group_caption, echo = FALSE}
+reform_n_search_group_cap <- format_caption(figure_caps, "reform_n")
+```
+```{r reform_n_search_group, fig.cap = reform_n_search_group_cap, dependson = "reformulation"}
 reform_times %>% ungroup %>%
   mutate(n_search=ifelse(n_search>=10,"10+",n_search)) %>%
   group_by(n_search) %>%
@@ -732,9 +782,12 @@ reform_times %>% ungroup %>%
   ggtitle("Proportion of search sessions making N search groups")
 ```
 
-We can see that test group users are less likely to reformulate their queries.
+In `r figure_caps("query_reform_prop", display = "cite")` and `r figure_caps("query_reform_counts", display = "cite")`, we can see that test group users are less likely to reformulate their queries. `r figure_caps("query_reform_prop2", display = "cite")` and `r figure_caps("query_reform_counts2", display = "cite")` show that zhwiki had the largest discrepancy between control and test group.
 
-```{r reform_eda1}
+```{r query_reformulations_prop_caption, echo = FALSE}
+query_reform_prop_cap <- format_caption(figure_caps, "query_reform_prop")
+```
+```{r reform_eda1, fig.cap = query_reform_prop_cap, dependson = "reformulation"}
 reformulation_counts <- reform_times %>%
   group_by(`test group`) %>%
   summarize(`searches with query reformulations` = sum(as.numeric(unlist(lapply(n_reformulate, function(x) strsplit(x, ",")))) > 0),
@@ -762,8 +815,10 @@ reformulation_counts %>%
   geom_text(aes(label = sprintf("%.2f%%", 100 * proportion),
                 vjust = "bottom", hjust = "center"), nudge_x = 0.1)
 ```
-
-```{r reform_eda1_wiki}
+```{r query_reformulations_prop_caption2, echo = FALSE}
+query_reform_prop_cap2 <- format_caption(figure_caps, "query_reform_prop2")
+```
+```{r reform_eda1_wiki, fig.cap = query_reform_prop_cap2, dependson = "reformulation"}
 reformulation_counts <- reform_times %>%
   group_by(wiki, `test group`) %>%
   summarize(`searches with query reformulations` = sum(as.numeric(unlist(lapply(n_reformulate, function(x) strsplit(x, ",")))) > 0),
@@ -792,7 +847,10 @@ reformulation_counts %>%
   facet_wrap(~ wiki, ncol = 3)
 ```
 
-```{r reform_eda2}
+```{r query_reformulations_counts_caption, echo = FALSE}
+query_reform_counts_cap <- format_caption(figure_caps, "query_reform_counts")
+```
+```{r reform_eda2, fig.cap = query_reform_counts_cap, dependson = "reformulation", cache = TRUE}
 count_reformulation <- function(n_reformulate){
   temp <- as.numeric(unlist(lapply(n_reformulate, function(x) strsplit(x, ","))))
   temp <- ifelse(temp>=3, "3+", temp)
@@ -815,8 +873,10 @@ reform_times %>%
        subtitle = "Queries were grouped when they shared common results or common key words") +
   theme(legend.position = "bottom")
 ```
-
-```{r reform_eda2_wiki}
+```{r query_reformulations_counts_caption2, echo = FALSE}
+query_reform_counts_cap2 <- format_caption(figure_caps, "query_reform_counts2")
+```
+```{r reform_eda2_wiki, fig.cap = query_reform_counts_cap2, dependson = c("reformulation", "reform_eda2")}
 reform_times %>%
   group_by(wiki, `test group`) %>%
   do(count_reformulation(.$n_reformulate)) %>%
@@ -832,3 +892,11 @@ reform_times %>%
   theme(legend.position = "bottom")+
   facet_wrap(~ wiki, ncol = 3)
 ```
+
+## Conclusion and Discussion
+
+For the test group, we have a much better ZRR but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing users worse results. However, dwell time and query reformulation analysis show that users may like the results they are getting on some dimension. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.
+
+The relatively large decrease in engagement and relevancy for zhwiki may be the result of tokenizer behavior. Chinese is the sole language in this test where we do not have a custom analysis chain. We emit only unigrams, so any page that randomly has all the same characters as the query in it will be returned. 
+
+The query reformulation analysis in this report is not ideal. On one hand, finding out shared tokens could not detect reformulated queries when users fix a typo in space-less languages. For example, when users modify their queries from "灯龙" to "灯笼" (lantern) they are fixing a typo, but tokenizers would take them as two different words. On the other hand, we found that many users like to try their queries in different languages. Without enabling search across wikis in different languages, we are unable to detect this kind of reformulation.
