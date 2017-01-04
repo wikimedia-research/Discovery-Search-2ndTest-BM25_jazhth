@@ -1,6 +1,6 @@
 ---
 title: "Second BM25 A/B Test Analysis"
-subtitle: "First Draft"
+subtitle: "Second Draft"
 author:
 - <a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)
 - <a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering & Report)
@@ -95,7 +95,7 @@ figure_caps("query_reform_counts2", "Proportions of searches with 0, 1, 2, and 3
 
 ## Executive Summary
 
-In order to assess the efficacy of BM25 in space-less language, Discovery’s Search team has decided to conduct a second A/B test in Chinese, Japanese and Thai Wikipedias. We observed that the test group that used per-field query builder with incoming links and pageviews as query-independent factors had a much better Zero Result Rate but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing test group users worse results. However, longer dwell-time and fewer query reformulations show that test group users might actually like the results they are getting better than the control group in that respect. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.
+In order to assess the efficacy of BM25 in space-less language, Discovery’s Search team has decided to conduct a second A/B test in Chinese, Japanese and Thai Wikipedias. We observed that the test group that used per-field query builder with incoming links and pageviews as query-independent factors had a much better Zero Result Rate but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing test group users worse results. However, longer dwell-time and fewer query reformulations show that test group users might actually like the results they are getting better than the control group in that respect. We recommend deploying BM25 for all wikis but not reindexing projects in space-less languages for now.
 
 ## Background
 
@@ -103,7 +103,7 @@ To improve the relevancy of search results, Discovery’s Search team decided to
 
 However, we then [realized](https://phabricator.wikimedia.org/T147008#2679631) that our analysis chain is sub-optimal for space-less language queries, which will break words on every characters for the plain field. Therefore, we ran a [second A/B test](https://phabricator.wikimedia.org/T147495) for Chinese, Japanese and Thai Wikipedias to test whether the new per-field BM25 builder is sufficiently worse with those languages. We are primarily interested in:
 
-* __Zero results rate__, the proportion of searches that yielded zero results (smaller is better)
+* __Zero results rate__, the proportion of searches that yielded zero results (smaller is usually better)
 * __Users' engagement__ with the search results, measured as the clickthrough rate (bigger is better)
 * __PaulScore__, a metric of search results' relevancy that relies on the position of the clicked result[s] (bigger is better); see [PaulScore Definition](https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#paulscore_definition) for more details
 * __Query reformulation__ -- one way to think about the strength of our search engine is how many times the user reformulates their query; if a user in the test group has to reformulate their query many more times to get the results they are interested in, then maybe the change is for the worse
@@ -301,7 +301,7 @@ print_caption(format_caption(table_caps, "group_counts3"))
 
 ### Zero Results Rate
 
-In `r figure_caps("zrr", display = "cite")`, we see that the test group that used BM25 with incoming links and pageviews as query-independent factors had a significantly lower zero results rate (ZRR), but perhaps at the cost of relevance and engagement with the results. `r figure_caps("zrr2", display = "cite")` shows that zhwiki had the largest ZRR difference between control and test group.
+In `r figure_caps("zrr", display = "cite")`, we see that the test group that used BM25 with incoming links and pageviews as query-independent factors had a significantly lower zero results rate (ZRR). Smaller ZRR is usually better, but looking at the [PaulScore](#paulscore), [engagement](#engagement) and [First Clicked Result’s Position](#first_clicked_result’s_position), we doubt that it came at the cost of relevance and engagement with the results. `r figure_caps("zrr2", display = "cite")` shows that zhwiki had the largest ZRR difference between control and test group.
 
 ```{r zrr, dependson = "query_clustering", cache = TRUE}
 zrr_pages <- searches %>%
@@ -315,12 +315,12 @@ zrr_pages <- cbind(zrr_pages, as.data.frame(binom:::binom.bayes(zrr_pages$zero, 
 ```{r zrr_caption, echo = FALSE}
 zrr_cap <- format_caption(figure_caps, "zrr")
 ```
-<!-- Fig 1 would be better as a table as I don't think that there is enough data being visualized to warrant a graphic. -->
+
 ```{r zrr_eda, fig.cap = zrr_cap, dependson = "zrr"}
 zrr_pages %>%
   ggplot(aes(x = `test group`, y = `mean`, color = `test group`)) +
   geom_pointrange(aes(ymin = lower, ymax = upper)) +
-  scale_x_discrete(limits = rev(levels(events$test_group))) +
+  scale_x_discrete(limits = levels(events$test_group)) +
   scale_y_continuous(labels = scales::percent_format()) +
   scale_color_brewer("Test Group", palette = "Set1", guide = FALSE) +
   labs(x = NULL, y = "Zero Results Rate",
@@ -356,7 +356,7 @@ zrr_pages %>%
 
 ### PaulScore
 
-In `r figure_caps("paulscore", display = "cite")`, we see that the test group had slightly lower PaulScores, which indicates that the results were less relevant. The difference is not significant when F = 0.9. `r figure_caps("paulscore2", display = "cite")` shows that zhwiki had the largest PaulScore differences between control and test group.
+In `r figure_caps("paulscore", display = "cite")`, we see that the test group had slightly lower PaulScores, which indicates that the results were less relevant. The difference is not significant when F = 0.9. This make sense because the smaller the value of scoring factor, the more weight put on the first few results, with lower ranking results counting for almost nothing. F=0.9 takes into account the broadest range of result rankings, and thus is less likely to change as dramatically. `r figure_caps("paulscore2", display = "cite")` shows that zhwiki had the largest PaulScore differences between control and test group.
 
 ```{r paulscores, dependson = "query_clustering", cache = TRUE}
 set.seed(777)
@@ -809,7 +809,7 @@ reformulation_counts <- cbind(
 reformulation_counts %>%
   ggplot(aes(x = `test group`, y = `mean`, color = `test group`)) +
   geom_pointrange(aes(ymin = lower, ymax = upper)) +
-  scale_x_discrete(limits = rev(levels(events$test_group))) +
+  scale_x_discrete(limits = levels(events$test_group)) +
   scale_y_continuous(labels = scales::percent_format()) +
   scale_color_brewer("Test Group", palette = "Set1", guide = FALSE) +
   labs(x = NULL, y = "% of searches with query reformulations",
@@ -898,8 +898,10 @@ reform_times %>%
 
 ## Conclusion and Discussion
 
-For the test group, we observed a much better ZRR but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, indicating that we are showing users worse results. However, dwell-time and query reformulation analysis show that users may like the results they are getting in some aspect. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.
+For the test group, we observed a much better ZRR but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, indicating that we are showing users worse results. However, dwell-time and query reformulation analysis show that users may like the results they are getting in some aspect. We recommend deploying BM25 for all wikis but not reindexing projects in space-less languages for now.
 
-The relatively large decrease in engagement and relevancy for zhwiki may be the result of tokenizer behavior. Chinese is the sole language in this test where we do not have a custom analysis chain. We emit only unigrams, so any page that randomly has all the same characters as the query in it will be returned. 
+This test revealed the performance of BM25 is unsatisfactory on space-less languages: some CirrusSearch components are dependent on the presence of spaces. We agree that the current behavior (forcing a proximity match on every query) is far from ideal but given the outcome of the test we decided not to move forward without prior work on space-less languages. We need better tokenization, and we need to track and fix all the components that make the bold assumption of the presence of spaces to activate/deactivate features.
+
+The relatively large decrease in engagement and relevancy for zhwiki may be the result of tokenizer behavior. Chinese is the sole language in this test where we do not have a custom analysis chain. We emit only unigrams, so any page that randomly has all the same characters as the query in it will be returned. This can greatly decreases ZRR without any increase in search result quality or relevance. In English this would be roughly similar to returning any page that had all the same letters as the query.
 
 The query reformulation analysis in this report is not ideal. Firstly, finding out shared tokens could not detect reformulated queries when users fix a typo in space-less languages. For example, when users modify their queries from "灯龙" to "灯笼" (lantern) they are fixing a typo, but tokenizers would take them as two different words. Secondly, we found that many users like to try their queries in different languages. Without enabling search across wikis in different languages, we are unable to detect this kind of reformulation.

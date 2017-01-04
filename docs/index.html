@@ -16,7 +16,7 @@
 <meta name="author" content="Deb Tankersley (Product Management)" />
 <meta name="author" content="Chelsy Xie (Analysis &amp; Report)" />
 
-<meta name="date" content="2016-12-08" />
+<meta name="date" content="2017-01-03" />
 
 <title>Second BM25 A/B Test Analysis</title>
 
@@ -278,14 +278,14 @@ div.tocify {
 
 
 <h1 class="title toc-ignore">Second BM25 A/B Test Analysis</h1>
-<h3 class="subtitle"><em>First Draft</em></h3>
+<h3 class="subtitle"><em>Second Draft</em></h3>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)</em></h4>
 <h4 class="author"><em><a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering &amp; Report)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:TJones_(WMF)'>Trey Jones</a> (Engineering &amp; Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:MPopov_(WMF)'>Mikhail Popov</a> (Review)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:DTankersley_(WMF)'>Deb Tankersley</a> (Product Management)</em></h4>
 <h4 class="author"><em><a href = 'https://meta.wikimedia.org/wiki/User:CXie_(WMF)'>Chelsy Xie</a> (Analysis &amp; Report)</em></h4>
-<h4 class="date"><em>08 December 2016</em></h4>
+<h4 class="date"><em>03 January 2017</em></h4>
 
 </div>
 
@@ -307,14 +307,14 @@ $(function() {
 </p>
 <div id="executive-summary" class="section level2">
 <h2>Executive Summary</h2>
-<p>In order to assess the efficacy of BM25 in space-less language, Discovery’s Search team has decided to conduct a second A/B test in Chinese, Japanese and Thai Wikipedia. We found that for test group that used per-field query builder with incoming links and pageviews as query-independent factors, we have a much better Zero Result Rate but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing test group users worse results. However, longer dwell time and fewer query reformulation show that test group users may like the results they are getting on some dimension. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.</p>
+<p>In order to assess the efficacy of BM25 in space-less language, Discovery’s Search team has decided to conduct a second A/B test in Chinese, Japanese and Thai Wikipedias. We observed that the test group that used per-field query builder with incoming links and pageviews as query-independent factors had a much better Zero Result Rate but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing test group users worse results. However, longer dwell-time and fewer query reformulations show that test group users might actually like the results they are getting better than the control group in that respect. We recommend deploying BM25 for all wikis but not reindexing projects in space-less languages for now.</p>
 </div>
 <div id="background" class="section level2">
 <h2>Background</h2>
 <p>To improve the relevancy of search results, Discovery’s Search team decided to try a new document-ranking function called <a href="https://en.wikipedia.org/wiki/Okapi_BM25">Okapi BM25</a> (BM stands for Best Matching), and ran an <a href="https://phabricator.wikimedia.org/T143585">A/B test</a> from August 30 to September 10 to assess the efficacy of the proposed switch. The <a href="https://wikimedia-research.github.io/Discovery-Search-Test-BM25">analysis</a> showed that BM25 ranking with incoming links and pageviews as query-independent factors appears to give users results that are more relevant and that they engage with more.</p>
-<p>However, we then <a href="https://phabricator.wikimedia.org/T147008#2679631">realized</a> that our analysis chain is sub-optimal for space-less language queries, which will break words on every characters for the plain field. Therefore, we ran a <a href="https://phabricator.wikimedia.org/T147495">second A/B test</a> for Chinese, Japanese and Thai Wikipedia to test that the new per-field BM25 builder is or is not sufficiently worse on these languages. We are primarily interested in:</p>
+<p>However, we then <a href="https://phabricator.wikimedia.org/T147008#2679631">realized</a> that our analysis chain is sub-optimal for space-less language queries, which will break words on every characters for the plain field. Therefore, we ran a <a href="https://phabricator.wikimedia.org/T147495">second A/B test</a> for Chinese, Japanese and Thai Wikipedias to test whether the new per-field BM25 builder is sufficiently worse with those languages. We are primarily interested in:</p>
 <ul>
-<li><strong>Zero results rate</strong>, the proportion of searches that yielded zero results (smaller is better)</li>
+<li><strong>Zero results rate</strong>, the proportion of searches that yielded zero results (smaller is usually better)</li>
 <li><strong>Users’ engagement</strong> with the search results, measured as the clickthrough rate (bigger is better)</li>
 <li><strong>PaulScore</strong>, a metric of search results’ relevancy that relies on the position of the clicked result[s] (bigger is better); see <a href="https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#paulscore_definition">PaulScore Definition</a> for more details</li>
 <li><strong>Query reformulation</strong> – one way to think about the strength of our search engine is how many times the user reformulates their query; if a user in the test group has to reformulate their query many more times to get the results they are interested in, then maybe the change is for the worse</li>
@@ -366,7 +366,7 @@ cirrus &lt;-<span class="st"> </span>readr::<span class="kw">read_tsv</span>(<sp
 cirrus &lt;-<span class="st"> </span>cirrus[!<span class="kw">duplicated</span>(cirrus),]
 events &lt;-<span class="st"> </span><span class="kw">left_join</span>(events, cirrus, <span class="dt">by =</span> <span class="kw">c</span>(<span class="st">&quot;event_id&quot;</span>, <span class="st">&quot;page_id&quot;</span>, <span class="st">&quot;cirrus_id&quot;</span>))
 <span class="kw">rm</span>(cirrus)</code></pre></div>
-<p>For Chinese Wikipedia (zhwiki) and Japanese Wikipedia (jawiki), users had a 1 in 16 chance of being selected for search satisfaction tracking according to our <a href="https://meta.wikimedia.org/w/index.php?title=Schema:TestSearchSatisfaction2&amp;id=15922352">TestSearchSatisfaction2 #15922352</a> schema. Those users who were randomly selected to have their sessions anonymously tracked then had a 12 in 13 chance of being selected for the BM25 test. For Thai Wikipedia (thwiki), users had a 1 in 5 chance of being selected for search satisfaction tracking and then had a 38 in 39 chance of being selected for the BM25 test. The sampled sessions were evenly put into control group (tf-idf) and test group (Using per-field query builder with incoming links and pageviews as QIFs); see the <a href="https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#data">first BM25 test report</a> for more details. The test was deployed on October 27th and ran for a week for zhwiki and jawiki; for thwiki, we ran the test from October 27 to November 15.</p>
+<p>For Chinese Wikipedia (zhwiki) and Japanese Wikipedia (jawiki), users had a 1 in 16 chance of being selected for anonymous tracking according to our <a href="https://meta.wikimedia.org/w/index.php?title=Schema:TestSearchSatisfaction2&amp;id=15922352">TestSearchSatisfaction2 #15922352</a> event logging schema. Those users who were randomly selected to have their sessions anonymously tracked then had a 12 in 13 chance of being selected for the BM25 test. For Thai Wikipedia (thwiki), users had a 1 in 5 chance of being selected for search satisfaction tracking and then had a 38 in 39 chance of being selected for the BM25 test due to fewer visitors to that particular project. The sampled sessions were evenly put into a control group (tf-idf) and a test group (using per-field query builder with incoming links and pageviews as QIFs); see the <a href="https://wikimedia-research.github.io/Discovery-Search-Test-BM25/#data">first BM25 test report</a> for more details. The test was deployed on October 27th and ran for a week for zhwiki and jawiki, but until November 15th for thwiki specifically.</p>
 <p>The full-text (as opposed to auto-complete) searching event logging data was extracted from the database using this <a href="https://github.com/wikimedia-research/Discovery-Search-2ndTest-BM25_jazhth/blob/master/data.R">script</a>. We collected a total of 230.2K events from 36.1K unique sessions. See Table 1 for counts broken down by wiki and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">events_summary &lt;-<span class="st"> </span>events %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(wiki, <span class="st">`</span><span class="dt">Test group</span><span class="st">`</span> =<span class="st"> </span>test_group) %&gt;%
@@ -663,7 +663,7 @@ knitr::<span class="kw">kable</span>(clickedResults_summary, <span class="dt">fo
 <h2>Results</h2>
 <div id="zero-results-rate" class="section level3">
 <h3>Zero Results Rate</h3>
-<p>In Figure 1, we see that the test group that used BM25 with incoming links and pageviews as query-independent factors had a significantly lower ZRR, but perhaps at the cost of relevance and engagement with the results. Figure 2 shows that zhwiki had the largest ZRR difference between control and test group.</p>
+<p>In Figure 1, we see that the test group that used BM25 with incoming links and pageviews as query-independent factors had a significantly lower zero results rate (ZRR). Smaller ZRR is usually better, but looking at the <a href="#paulscore">PaulScore</a>, <a href="#engagement">engagement</a> and <a href="#first_clicked_result’s_position">First Clicked Result’s Position</a>, we doubt that it came at the cost of relevance and engagement with the results. Figure 2 shows that zhwiki had the largest ZRR difference between control and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">zrr_pages &lt;-<span class="st"> </span>searches %&gt;%
 <span class="st">  </span><span class="kw">group_by</span>(<span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, results) %&gt;%
 <span class="st">  </span>tally %&gt;%
@@ -674,7 +674,7 @@ zrr_pages &lt;-<span class="st"> </span><span class="kw">cbind</span>(zrr_pages,
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">zrr_pages %&gt;%
 <span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">y =</span> <span class="st">`</span><span class="dt">mean</span><span class="st">`</span>, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
 <span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper)) +
-<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">rev</span>(<span class="kw">levels</span>(events$test_group))) +
+<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">levels</span>(events$test_group)) +
 <span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
 <span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="ot">FALSE</span>) +
 <span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;Zero Results Rate&quot;</span>,
@@ -712,7 +712,7 @@ zrr_pages %&gt;%
 </div>
 <div id="paulscore" class="section level3">
 <h3>PaulScore</h3>
-<p>In Figure 3, we see that the test group had slightly lower PaulScores, which indicates that the results were less relevant. The difference is not significant when F = 0.9. Figure 4 shows that zhwiki had the largest PaulScore differences between control and test group.</p>
+<p>In Figure 3, we see that the test group had slightly lower PaulScores, which indicates that the results were less relevant. The difference is not significant when F = 0.9. This make sense because the smaller the value of scoring factor, the more weight put on the first few results, with lower ranking results counting for almost nothing. F=0.9 takes into account the broadest range of result rankings, and thus is less likely to change as dramatically. Figure 4 shows that zhwiki had the largest PaulScore differences between control and test group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">set.seed</span>(<span class="dv">777</span>)
 paulscores &lt;-<span class="st"> </span>searches %&gt;%
 <span class="st">  </span>ungroup %&gt;%
@@ -928,6 +928,7 @@ first_clicked %&gt;%
 <span class="st">  </span><span class="kw">scale_x_continuous</span>(<span class="dt">name =</span> <span class="st">&quot;T (Dwell Time in seconds)&quot;</span>, <span class="dt">breaks=</span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>))+<span class="st"> </span>
 <span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="st">&quot;Proportion of visits longer than T (P%)&quot;</span>, <span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(),
                      <span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>) +
 <span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>)</code></pre></div>
 <div class="figure">
 <img src="index_files/figure-html/dwell_time_eda-1.png" alt="Figure 9: At time T, at most P% of users still stay on their visited pages. Broken down by test group." />
@@ -953,6 +954,7 @@ first_clicked %&gt;%
 <span class="st">  </span><span class="kw">scale_x_continuous</span>(<span class="dt">name =</span> <span class="st">&quot;T (Dwell Time in seconds)&quot;</span>, <span class="dt">breaks=</span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>, <span class="dv">50</span>, <span class="dv">60</span>, <span class="dv">90</span>, <span class="dv">120</span>, <span class="dv">150</span>, <span class="dv">180</span>, <span class="dv">210</span>, <span class="dv">240</span>, <span class="dv">300</span>, <span class="dv">360</span>, <span class="dv">420</span>))+<span class="st"> </span>
 <span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="st">&quot;Proportion of visits longer than T (P%)&quot;</span>, <span class="dt">labels =</span> scales::<span class="kw">percent_format</span>(),
                      <span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) +
+<span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>) +
 <span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;bottom&quot;</span>) +
 <span class="st">  </span><span class="kw">facet_wrap</span>(~<span class="st"> </span>wiki, <span class="dt">ncol=</span><span class="dv">1</span>, <span class="dt">nrow =</span><span class="dv">3</span>)</code></pre></div>
 <div class="figure">
@@ -1125,7 +1127,7 @@ reformulation_counts &lt;-<span class="st"> </span><span class="kw">cbind</span>
 reformulation_counts %&gt;%
 <span class="st">  </span><span class="kw">ggplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>, <span class="dt">y =</span> <span class="st">`</span><span class="dt">mean</span><span class="st">`</span>, <span class="dt">color =</span> <span class="st">`</span><span class="dt">test group</span><span class="st">`</span>)) +
 <span class="st">  </span><span class="kw">geom_pointrange</span>(<span class="kw">aes</span>(<span class="dt">ymin =</span> lower, <span class="dt">ymax =</span> upper)) +
-<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">rev</span>(<span class="kw">levels</span>(events$test_group))) +
+<span class="st">  </span><span class="kw">scale_x_discrete</span>(<span class="dt">limits =</span> <span class="kw">levels</span>(events$test_group)) +
 <span class="st">  </span><span class="kw">scale_y_continuous</span>(<span class="dt">labels =</span> scales::<span class="kw">percent_format</span>()) +
 <span class="st">  </span><span class="kw">scale_color_brewer</span>(<span class="st">&quot;Test Group&quot;</span>, <span class="dt">palette =</span> <span class="st">&quot;Set1&quot;</span>, <span class="dt">guide =</span> <span class="ot">FALSE</span>) +
 <span class="st">  </span><span class="kw">labs</span>(<span class="dt">x =</span> <span class="ot">NULL</span>, <span class="dt">y =</span> <span class="st">&quot;% of searches with query reformulations&quot;</span>,
@@ -1214,8 +1216,9 @@ reform_times %&gt;%
 </div>
 <div id="conclusion-and-discussion" class="section level2">
 <h2>Conclusion and Discussion</h2>
-<p>For the test group, we have a much better ZRR but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, which indicates that we are showing users worse results. However, dwell time and query reformulation analysis show that users may like the results they are getting on some dimension. We recommend deploying BM25 for all wikis but not reindex projects in space-less languages for now.</p>
-<p>The relatively large decrease in engagement and relevancy for zhwiki may be the result of tokenizer behavior. Chinese is the sole language in this test where we do not have a custom analysis chain. We emit only unigrams, so any page that randomly has all the same characters as the query in it will be returned.</p>
+<p>For the test group, we observed a much better ZRR but slightly worse PaulScores, large decrease in clickthrough rate, and fewer users clicked on the first result first, indicating that we are showing users worse results. However, dwell-time and query reformulation analysis show that users may like the results they are getting in some aspect. We recommend deploying BM25 for all wikis but not reindexing projects in space-less languages for now.</p>
+<p>This test revealed the performance of BM25 is unsatisfactory on space-less languages: some CirrusSearch components are dependent on the presence of spaces. We agree that the current behavior (forcing a proximity match on every query) is far from ideal but given the outcome of the test we decided not to move forward without prior work on space-less languages. We need better tokenization, and we need to track and fix all the components that make the bold assumption of the presence of spaces to activate/deactivate features.</p>
+<p>The relatively large decrease in engagement and relevancy for zhwiki may be the result of tokenizer behavior. Chinese is the sole language in this test where we do not have a custom analysis chain. We emit only unigrams, so any page that randomly has all the same characters as the query in it will be returned. This can greatly decreases ZRR without any increase in search result quality or relevance. In English this would be roughly similar to returning any page that had all the same letters as the query.</p>
 <p>The query reformulation analysis in this report is not ideal. Firstly, finding out shared tokens could not detect reformulated queries when users fix a typo in space-less languages. For example, when users modify their queries from “灯龙” to “灯笼” (lantern) they are fixing a typo, but tokenizers would take them as two different words. Secondly, we found that many users like to try their queries in different languages. Without enabling search across wikis in different languages, we are unable to detect this kind of reformulation.</p>
 </div>
 
