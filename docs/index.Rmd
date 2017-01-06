@@ -1,6 +1,5 @@
 ---
 title: "Second BM25 A/B Test Analysis"
-subtitle: "Second Draft"
 author:
 - <a href = 'https://meta.wikimedia.org/wiki/User:EBernhardson_(WMF)'>Erik Bernhardson</a> (Engineering)
 - <a href = 'https://www.mediawiki.org/wiki/User:DCausse_(WMF)'>David Causse</a> (Engineering & Report)
@@ -869,7 +868,7 @@ reform_times %>%
   geom_bar(stat = "identity", position = "dodge") +
   scale_y_continuous(labels = scales::percent_format()) +
   scale_fill_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
-  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), vjust = "bottom"),
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), vjust = -0.5),
             position = position_dodge(width = 1)) +
   labs(y = "Proportion of searches", x = "Approximate number of query reformulations per grouped search",
        title = "Number of query reformulations by test group",
@@ -887,7 +886,7 @@ reform_times %>%
   geom_bar(stat = "identity", position = "dodge") +
   scale_y_continuous(labels = scales::percent_format()) +
   scale_fill_brewer("Test Group", palette = "Set1", guide = guide_legend(ncol = 2)) +
-  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), vjust = "bottom"),
+  geom_text(aes(label = sprintf("%.1f%%", 100 * proportion), vjust = -0.5),
             position = position_dodge(width = 1)) +
   labs(y = "Proportion of searches", x = "Approximate number of query reformulations per grouped search",
        title = "Number of query reformulations by test group and wiki",
