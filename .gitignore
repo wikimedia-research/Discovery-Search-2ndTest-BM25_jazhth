@@ -7,3 +7,6 @@ data
 *.tsv
 docs/index_cache
 docs/index.md
+pdf/*cache
+pdf/figure
+pdf/*files
